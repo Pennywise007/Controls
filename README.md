@@ -1,2 +1,2 @@
-# Constrols
+# Controls
 MFC controls
