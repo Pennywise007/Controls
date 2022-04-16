@@ -10,6 +10,7 @@ BEGIN_MESSAGE_MAP(CEditBase, CEdit)
 	ON_WM_CREATE()
 	ON_WM_CTLCOLOR_REFLECT()
 	ON_MESSAGE(WM_PASTE, &CEditBase::OnPaste)
+	ON_MESSAGE(WM_MFC_INITCTRL, &CEditBase::OnInitControl)
 END_MESSAGE_MAP()
 
 CEditBase::CEditBase(_In_opt_ bool bUseNumbersOnly /*= false*/)
@@ -92,7 +93,8 @@ HBRUSH CEditBase::CtlColor(CDC* pDC, UINT /*nCtlColor*/)
 
 BOOL CEditBase::PreTranslateMessage(MSG* pMsg)
 {
-	m_ptooltip->RelayEvent(pMsg);
+	if (m_ptooltip->GetSafeHwnd() != NULL)
+		m_ptooltip->RelayEvent(pMsg);
 
 	if (CEdit::GetStyle() & ES_NUMBER)
 	{
@@ -158,12 +160,11 @@ LRESULT CEditBase::HideBubble()
 	return CEdit::SendMessage(EM_HIDEBALLOONTIP, 0, 0);
 }
 
-void CEditBase::PreSubclassWindow()
+LRESULT CEditBase::OnInitControl(WPARAM wParam, LPARAM lParam)
 {
 	m_ptooltip->Create(this);
 	m_ptooltip->Activate(TRUE);
-
-	CEdit::PreSubclassWindow();
+	return 0;
 }
 
 BOOL CEditBase::ShowError(_In_opt_ ErrorType Type /*= ErrorType::BAD_INPUT_VAL*/)

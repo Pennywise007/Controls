@@ -74,9 +74,9 @@ protected://********************************************************************
 protected://***************************************************************************************
 	DECLARE_MESSAGE_MAP()
 public://******************************************************************************************
-	virtual void PreSubclassWindow();
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	afx_msg HBRUSH CtlColor(CDC* /*pDC*/, UINT /*nCtlColor*/);
 	afx_msg LRESULT OnPaste(WPARAM wParam, LPARAM lParam);
+	LRESULT OnInitControl(WPARAM wParam, LPARAM lParam);
 };	//*********************************************************************************************
 

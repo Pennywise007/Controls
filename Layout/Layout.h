@@ -6,6 +6,7 @@
 #include <afxlayout.h>
 #include <afxwin.h>
 #include <bitset>
+#include <functional>
 #include <list>
 #include <map>
 #include <optional>
@@ -64,7 +65,11 @@ public: // setting control moving and sizing bounds
     static void SetWindowBounds(CWnd& wnd, BoundsType type, std::optional<LONG> left, std::optional<LONG> top, std::optional<LONG> right, std::optional<LONG> bottom);
     // Setting minimum size of window, don`t allow to resize less
     static void SetWindowMinimumSize(CWnd& wnd, std::optional<UINT> width, std::optional<UINT> height);
-
+public: // callbacks
+    // On size changed callback.If width changed - newWidth != empty, if height changed - newHeight != empty
+    typedef std::function<void(CWnd& window, int newWidth, int newHeight)> OnSizeChangedCallback;
+    // Setting on size changed callback.If width changed - newWidth != empty, if height changed - newHeight != empty
+    static void OnSizeChanged(CWnd& wnd, const OnSizeChangedCallback& onSizeChanged);
 private:
     // allow creating only from instance
     Layout() = default;
@@ -137,6 +142,8 @@ private:    // Size restrictions
     };
     // list of windows and their size restrictions
     std::map<HWND, MinimumSize> m_minimumSizeWindows;
+private:
+    std::map<HWND, OnSizeChangedCallback> m_onSizeChangedCallbacks;
 };
 
 // Helper class, allow to apply layout from dialog resource files

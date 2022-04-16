@@ -42,4 +42,6 @@ private:
 private:
     // диалоги для каждой вкладки
     std::map<LONG, std::shared_ptr<CWnd>> m_tabWindows;
+public:
+    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 };

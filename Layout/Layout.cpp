@@ -2,6 +2,7 @@
 
 #include <afxext.h>
 #include <afxwin.h>
+#include <algorithm>
 #include <cmath>
 #include <list>
 
@@ -33,7 +34,8 @@ void Layout::CheckNecessityToHandleDefProc(HWND hWnd)
     {
         if (m_anchoredWindows.find(hWnd) == m_anchoredWindows.end() &&
             m_boundedWindows.find(hWnd) == m_boundedWindows.end() &&
-            m_minimumSizeWindows.find(hWnd) == m_minimumSizeWindows.end())
+            m_minimumSizeWindows.find(hWnd) == m_minimumSizeWindows.end() &&
+            m_onSizeChangedCallbacks.find(hWnd) == m_onSizeChangedCallbacks.end())
         {
             ::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)it->second);
             m_defaultWindowProc.erase(it);
@@ -181,6 +183,23 @@ void Layout::SetWindowMinimumSize(CWnd& wnd, std::optional<UINT> width, std::opt
     anchor.TryAttachToWindowProc(wnd.m_hWnd);
 }
 
+void Layout::OnSizeChanged(CWnd& wnd, const Layout::OnSizeChangedCallback& onSizeChanged)
+{
+    ASSERT(::IsWindow(wnd.m_hWnd));
+
+    auto& anchor = Instance();
+    if (onSizeChanged)
+    {
+        anchor.m_onSizeChangedCallbacks[wnd.m_hWnd] = onSizeChanged;
+        anchor.TryAttachToWindowProc(wnd.m_hWnd);
+    }
+    else
+    {
+        anchor.m_onSizeChangedCallbacks.erase(wnd.m_hWnd);
+        anchor.CheckNecessityToHandleDefProc(wnd.m_hWnd);
+    }
+}
+
 LRESULT Layout::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     Layout& instance = Instance();
@@ -202,6 +221,17 @@ LRESULT Layout::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             if ((lpwndpos->flags & SWP_NOMOVE) && (lpwndpos->flags & SWP_NOSIZE) &&
                 !(lpwndpos->flags & SWP_SHOWWINDOW) && !(lpwndpos->flags & SWP_FRAMECHANGED))
                 break;
+
+            if (!(lpwndpos->flags & SWP_NOSIZE))
+            {
+                const auto onSizeChangedIt = instance.m_onSizeChangedCallbacks.find(hWnd);
+                if (onSizeChangedIt != instance.m_onSizeChangedCallbacks.end())
+                {
+                    CRect rect;
+                    GetClientRect(hWnd, rect);
+                    onSizeChangedIt->second(*CWnd::FromHandle(hWnd), rect.Width(), rect.Height());
+                }
+            }
 
             const auto anchorTargetIt = instance.m_anchoredWindows.find(hWnd);
             if (anchorTargetIt == instance.m_anchoredWindows.end())
@@ -302,7 +332,7 @@ LRESULT Layout::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             if (const auto it = instance.m_minimumSizeWindows.find(hWnd); it != instance.m_minimumSizeWindows.end())
             {
                 auto* info = (MINMAXINFO*)lParam;
-                POINT minSize = { it->second.width.value_or(MAXLONG64), it->second.height.value_or(MAXLONG64) };
+                POINT minSize = { (LONG)it->second.width.value_or(MAXLONG64), (LONG)it->second.height.value_or(MAXLONG64) };
                 info->ptMinTrackSize = std::move(minSize);
             }
         }

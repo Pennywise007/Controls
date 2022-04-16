@@ -226,6 +226,8 @@ afx_msg void CListEditSubItems<CBaseList>::OnLButtonDblClk(UINT nFlags,
             m_editSubItemWindow->GetClientRect(editControlRect);
             editorControl->MoveWindow(editControlRect);
 
+            editorControl->SetWindowText(CBaseList::GetItemText(hti.iItem, hti.iSubItem));
+
             // выделяем весь текст
             ::PostMessage(editorControl->m_hWnd, EM_SETSEL, 0, editorControl->GetWindowTextLengthW());
 

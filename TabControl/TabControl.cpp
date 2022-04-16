@@ -6,6 +6,7 @@
 BEGIN_MESSAGE_MAP(CTabControl, CTabCtrl)
     ON_WM_SIZE()
     ON_NOTIFY_REFLECT(TCN_SELCHANGE, &CTabControl::OnTcnSelchange)
+    ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 //----------------------------------------------------------------------------//
@@ -110,4 +111,9 @@ void CTabControl::layoutCurrentWindow()
     clRc.InflateRect(-2, -2);
 
     currentWindow->second->MoveWindow(&clRc, TRUE);
+}
+
+BOOL CTabControl::OnEraseBkgnd(CDC* pDC)
+{
+    return TRUE;
 }
