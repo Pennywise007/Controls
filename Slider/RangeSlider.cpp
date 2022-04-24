@@ -156,7 +156,6 @@ void CRangeSlider::OnPaintVertical(CDC& dc)
 
 void CRangeSlider::OnLButtonDown(UINT nFlags, CPoint point)
 {
-    TRACE("Down Point %d, %d\n", point.x, point.y);
     SetFocus();
     Invalidate();
 
@@ -255,14 +254,13 @@ void CRangeSlider::OnMouseMove(UINT nFlags, CPoint point)
             }
             break;
         default:
-            TRACE("Unknown Track Mode\n");
             ASSERT(FALSE);
             break;
         }
 
         if (previousThumbPositions != m_thumbsPosition)
         {
-            SendChangePositionEvent();
+            SendChangePositionEvent(previousThumbPositions);
             RedrawWindow();
         }
     }
@@ -357,30 +355,52 @@ void CRangeSlider::SetTooltipTextFormat(const wchar_t* format)
 
 void CRangeSlider::NormalizePositions()
 {
-    bool send = false;
+    const auto previousThumbPositions = m_thumbsPosition;
     if (m_thumbsPosition.first < m_range.first)
     {
         m_thumbsPosition.first = m_range.first;
         if (m_thumbsPosition.second < m_thumbsPosition.first)
             m_thumbsPosition.second = m_thumbsPosition.first;
-
-        send = true;
     }
     if (m_thumbsPosition.second > m_range.second)
     {
         m_thumbsPosition.second = m_range.second;
         if (m_thumbsPosition.first > m_thumbsPosition.second)
             m_thumbsPosition.first = m_thumbsPosition.second;
-
-        send = true;
     }
-    if (send)
-        SendChangePositionEvent();
+    if (previousThumbPositions != m_thumbsPosition)
+        SendChangePositionEvent(previousThumbPositions);
 }
 
-void CRangeSlider::SendChangePositionEvent() const
-{
-    ::SendMessage(GetParent()->GetSafeHwnd(), GetStyle() & TBS_VERT ? WM_VSCROLL : WM_HSCROLL, NULL, NULL);
+void CRangeSlider::SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const
+{ 
+    ASSERT(previousThumbPositions != m_thumbsPosition);
+
+    NMTRBTHUMBPOSCHANGING posChanging;
+    posChanging.hdr.hwndFrom = m_hWnd;
+    posChanging.hdr.idFrom = GetWindowLong(m_hWnd, GWL_ID);
+    posChanging.hdr.code = (UINT)TRBN_THUMBPOSCHANGING;
+    if (previousThumbPositions.first == m_thumbsPosition.first)
+    {
+        posChanging.nReason = (int)TrackMode::TRACK_RIGHT;
+        posChanging.dwPos = m_thumbsPosition.second;
+    }
+    else
+    {
+        if (previousThumbPositions.second == m_thumbsPosition.second)
+        {
+            posChanging.nReason = (int)TrackMode::TRACK_LEFT;
+            posChanging.dwPos = m_thumbsPosition.first;
+        }
+        else
+        {
+            posChanging.nReason = (int)TrackMode::TRACK_MIDDLE;
+            posChanging.dwPos = m_thumbsPosition.first; // changes in both thumbs
+        }
+    }
+
+    ::SendMessage(GetParent()->GetSafeHwnd(), GetStyle() & TBS_VERT ? WM_VSCROLL : WM_HSCROLL, posChanging.dwPos, NULL);
+    ::SendMessage(GetParent()->GetSafeHwnd(), WM_NOTIFY, posChanging.hdr.idFrom, reinterpret_cast<LPARAM>(&posChanging));
 }
 
 void CRangeSlider::ShowSliderTooltip(bool left, bool createTip)
@@ -436,6 +456,8 @@ void CRangeSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
     if ((nChar == keyMoveLeft || nChar == keyMoveRight) && !ctrlPressed)
     {
+        const auto previousThumbPositions = m_thumbsPosition;
+
         CRect clientRect;
         GetClientRect(&clientRect);
 
@@ -448,7 +470,7 @@ void CRangeSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             if (countDataInOnePixel <= *m_incrementStep)
                 countDataInOnePixel = *m_incrementStep;
             else
-                countDataInOnePixel = ApplyIncrementStep(countDataInOnePixel, *m_incrementStep);
+                countDataInOnePixel = round(countDataInOnePixel / *m_incrementStep) * *m_incrementStep;
         }
 
         const bool shiftPressed = ::GetKeyState(VK_SHIFT) < 0;
@@ -467,8 +489,11 @@ void CRangeSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             m_thumbsPosition.second = std::min<double>(m_thumbsPosition.second + countDataInOnePixel, m_range.second);
         }
 
-        SendChangePositionEvent();
-        Invalidate();
+        if (previousThumbPositions != m_thumbsPosition)
+        {
+            SendChangePositionEvent(previousThumbPositions);
+            Invalidate();
+        }
     }
 }
 
@@ -508,7 +533,7 @@ void CRangeSlider::OnTimer(UINT_PTR nIDEvent)
     if (m_incrementStep.has_value() && moveCursorDistance < *m_incrementStep)
         moveCursorDistance = *m_incrementStep;
 
-    const auto oldPositions = m_thumbsPosition;
+    const auto previousThumbPositions = m_thumbsPosition;
     if (valueAtMousePoint < m_thumbsPosition.first)
     {
         const auto newValue = ApplyIncrementStep(m_thumbsPosition.first, m_thumbsPosition.first - moveCursorDistance);
@@ -540,9 +565,9 @@ void CRangeSlider::OnTimer(UINT_PTR nIDEvent)
             m_thumbsPosition.second = newValue;
     }
 
-    if (oldPositions != m_thumbsPosition)
+    if (previousThumbPositions != m_thumbsPosition)
     {
-        SendChangePositionEvent();
+        SendChangePositionEvent(previousThumbPositions);
         Invalidate();
     }
 }
