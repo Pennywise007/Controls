@@ -1,10 +1,16 @@
-#include "stdafx.h"
-
+#include <afxcmn.h>
+#include <afxpriv.h>
 #include <float.h>
 #include <locale>
 #include <sstream>
 
 #include "CEditBase.h"
+
+#ifdef CEDIT_BASE_USE_TRANSLATE
+#include <Translate.h>
+#else
+#define TranslateString(Text) Text
+#endif
 
 BEGIN_MESSAGE_MAP(CEditBase, CEdit)
 	ON_WM_CREATE()
@@ -22,22 +28,9 @@ CEditBase::CEditBase(_In_opt_ bool bUseNumbersOnly /*= false*/)
 	, m_bUseOnlyIntegers		(false)
 	, m_ValuesRange				(std::make_pair(-(FLT_MAX), FLT_MAX))
 	, m_bUseLimits				(false)
-{	
-	m_ptooltip = new CToolTipCtrl();
-	m_brushBk = CreateSolidBrush(m_colorBk);
-}
-
-CEditBase::~CEditBase()
-{
-	if (m_brushBk != NULL)
-		DeleteObject(m_brushBk);
-
-	if (m_ptooltip)
-	{ 
-		delete m_ptooltip;
-		m_ptooltip = nullptr;
-	}
-}
+	, m_ptooltip				(std::make_unique<CToolTipCtrl>())
+	, m_brushBk					(RGB(255, 255, 255))
+{}
 
 void CEditBase::SetDefaultColors(_In_ bool bUseDefault /*= true*/)
 {
@@ -59,10 +52,7 @@ void CEditBase::SetBkColor(const COLORREF color)
 	if (m_colorBk != color)
 	{
 		m_colorBk = color;
-
-		if (m_brushBk != NULL)
-			DeleteObject(m_brushBk);
-		m_brushBk = CreateSolidBrush(m_colorBk);
+		m_brushBk.CreateSolidBrush(m_colorBk);
 	}
 	CEdit::Invalidate();
 }
@@ -170,21 +160,12 @@ LRESULT CEditBase::OnInitControl(WPARAM wParam, LPARAM lParam)
 BOOL CEditBase::ShowError(_In_opt_ ErrorType Type /*= ErrorType::BAD_INPUT_VAL*/)
 {
 	// отображаемые строки при вводе неправильного текста
-#ifdef CEDIT_BASE_USE_TRANSLATE
 	const static CString ErrorTitle			(TranslateString(L"Недопустимый символ"));
 	const static CString ErrorTextNumbers	(TranslateString(L"Здесь можно ввести только цифры и числа с плавающей точкой"));
 	const static CString ErrorTextIntegers	(TranslateString(L"Здесь можно ввести только целые числа"));
 	const static CString ErrorTextLimits	(TranslateString(L"Недопустимое число, вы можете задать число"));
 	const static CString ErrorTextLimitsFrom(TranslateString(L"от"));
 	const static CString ErrorTextLimitsTo	(TranslateString(L"до"));
-#else
-	const static CString ErrorTitle			(L"Недопустимый символ");
-	const static CString ErrorTextNumbers	(L"Здесь можно ввести только цифры и числа с плавающей точкой");
-	const static CString ErrorTextIntegers	(L"Здесь можно ввести только целые числа");
-	const static CString ErrorTextLimits	(L"Недопустимое число, вы можете задать число");
-	const static CString ErrorTextLimitsFrom(L"от");
-	const static CString ErrorTextLimitsTo	(L"до");
-#endif
 
 	CString ErrorStr(_T(""));
 	switch (Type)
@@ -193,12 +174,12 @@ BOOL CEditBase::ShowError(_In_opt_ ErrorType Type /*= ErrorType::BAD_INPUT_VAL*/
 			ErrorStr = m_bUseOnlyIntegers ? ErrorTextIntegers : ErrorTextNumbers;
 			break;
 		case ErrorType::NOT_FIT_INTO_LIMITS:
-			ErrorStr.Format(L"%s: %s %g %s %g.",
+			ErrorStr.Format(L"%s: %s %s %s %s.",
 							ErrorTextLimits.GetString(),
 							ErrorTextLimitsFrom.GetString(),
-							m_ValuesRange.first,
+							(std::wostringstream() << m_ValuesRange.first).str().c_str(),
 							ErrorTextLimitsTo.GetString(),
-							m_ValuesRange.second);
+						    (std::wostringstream() << m_ValuesRange.second).str().c_str());
 			break;
 		default:
 			break;
@@ -247,7 +228,7 @@ int CountElements(_In_ const CString& Str, _In_ wchar_t Char)
 	return Count;
 }
 
-BOOL CEditBase::CheckNumericString(_In_ CString Str)
+BOOL CEditBase::CheckNumericString(_In_ CString& Str)
 {
 	if (Str.IsEmpty() || !m_bUseNumbersOnly)
 		return TRUE;
@@ -301,9 +282,17 @@ BOOL CEditBase::CheckNumericString(_In_ CString Str)
 
 	if (m_bUseLimits)
 	{
-		const float CurVal = (float)_wtof(Str);
-		if (CurVal < m_ValuesRange.first || CurVal > m_ValuesRange.second)
+		const auto CurVal = _wtof(Str);
+		if (CurVal < m_ValuesRange.first)
+		{
+			Str = (std::wostringstream() << m_ValuesRange.first).str().c_str();
 			return ShowError(ErrorType::NOT_FIT_INTO_LIMITS);
+		}
+		else if (CurVal > m_ValuesRange.second)
+		{
+			Str = (std::wostringstream() << m_ValuesRange.second).str().c_str();
+			return ShowError(ErrorType::NOT_FIT_INTO_LIMITS);
+		}
 	}
 
 	return TRUE;
@@ -382,14 +371,17 @@ void CEditBase::SetNumbersSettings(_In_ bool NewState)
 	}
 }
 
-void CEditBase::SetMinMaxLimits(_In_ float MinVal, _In_ float MaxVal)
+void CEditBase::SetMinMaxLimits(_In_ double MinVal, _In_ double MaxVal)
 {
+	ASSERT(MinVal <= MaxVal);
+
 	m_ValuesRange = std::make_pair(MinVal, MaxVal);
 
 	if (m_bUseLimits)
 	{
 		CString Text;
 		CEdit::GetWindowText(Text);
-		CheckNumericString(Text);
+		if (!CheckNumericString(Text))
+			CEdit::SetWindowText(Text);
 	}
 }
