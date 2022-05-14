@@ -5,6 +5,7 @@ IMPLEMENT_DYNAMIC(TextProgressCtrl, CProgressCtrl )
 
 BEGIN_MESSAGE_MAP(TextProgressCtrl, CProgressCtrl )
     ON_WM_PAINT()
+    ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 TextProgressCtrl::~TextProgressCtrl()
@@ -15,10 +16,10 @@ TextProgressCtrl::~TextProgressCtrl()
 
 void TextProgressCtrl::OnPaint()
 {
-    CProgressCtrl::OnPaint();
-
     CClientDC	dc( this );
     CRect		rc;
+
+    CProgressCtrl::OnPaint();
 
     // Устанавливаем НОРМАЛЬНЫЙ шрифт
     CFont* pOldFont = dc.SelectObject( GetParent()->GetFont() );
@@ -27,11 +28,20 @@ void TextProgressCtrl::OnPaint()
     dc.SetBkMode( TRANSPARENT );
 
     CString	showText;
-    CProgressCtrl::GetWindowTextW(showText);
+    if (!m_outputFormat.empty())
+        showText.Format(m_outputFormat.c_str(), CProgressCtrl::GetPos());
+    else
+        CProgressCtrl::GetWindowTextW(showText);
+
     dc.DrawText( showText, rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER );
 
     // Восстанавливаем предыдущий шрифт
     dc.SelectObject( pOldFont );
+}
+
+BOOL TextProgressCtrl::OnEraseBkgnd(CDC* pDC)
+{
+    return TRUE;
 }
 
 void TextProgressCtrl::SetZeroRange( short range )
@@ -80,4 +90,9 @@ void TextProgressCtrl::Error() const
     auto pTaskbarList = afxGlobalData.GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_ERROR );
+}
+
+void TextProgressCtrl::SetOutputFormat(const std::wstring& format)
+{
+    m_outputFormat = format;
 }
