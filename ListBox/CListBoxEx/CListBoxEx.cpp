@@ -1,7 +1,3 @@
-#include "stdafx.h"
-
-#include <assert.h>
-
 #include "Controls/ThemeManagement.h"
 
 #include "CListBoxEx.h"
@@ -37,7 +33,7 @@ void CListBoxEx::PreSubclassWindow()
     // провер€ем необходимые стили, их невозможно установить через ModifyStyle(не будут работать)
     if (!(CListBox::GetStyle() & LBS_HASSTRINGS) ||
         !(CListBox::GetStyle() & LBS_OWNERDRAWVARIABLE))
-        assert(!"” списка должен быть установлен стиль LBS_OWNERDRAWVARIABLE и LBS_HASSTRINGS дл€ корректной работы!");
+        ASSERT(!"” списка должен быть установлен стиль LBS_OWNERDRAWVARIABLE и LBS_HASSTRINGS дл€ корректной работы!");
 
     EnableWindowTheme(GetSafeHwnd(), L"ListBox", L"Explorer", NULL);
 
