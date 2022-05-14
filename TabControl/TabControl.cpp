@@ -2,14 +2,12 @@
 
 #include "TabControl.h"
 
-////////////////////////////////////////////////////////////////////////////////
 BEGIN_MESSAGE_MAP(CTabControl, CTabCtrl)
+    ON_WM_ERASEBKGND()
     ON_WM_SIZE()
     ON_NOTIFY_REFLECT(TCN_SELCHANGE, &CTabControl::OnTcnSelchange)
-    ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
-//----------------------------------------------------------------------------//
 LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
                             _In_ std::shared_ptr<CWnd> tabWindow)
 {
@@ -33,7 +31,6 @@ LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
     return insertedIndex;
 }
 
-//----------------------------------------------------------------------------//
 LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
                             _In_ std::shared_ptr<CDialog> tabDialog, UINT nIDTemplate)
 {
@@ -61,7 +58,17 @@ LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
     return insertedIndex;
 }
 
-//----------------------------------------------------------------------------//
+std::shared_ptr<CWnd> CTabControl::GetTabWindow(LONG index)
+{
+    ASSERT(m_tabWindows.find(index) != m_tabWindows.end());
+    return m_tabWindows[index];
+}
+
+BOOL CTabControl::OnEraseBkgnd(CDC* /*pDC*/)
+{
+    return TRUE;
+}
+
 void CTabControl::OnSize(UINT nType, int cx, int cy)
 {
     CTabCtrl::OnSize(nType, cx, cy);
@@ -69,8 +76,7 @@ void CTabControl::OnSize(UINT nType, int cx, int cy)
     layoutCurrentWindow();
 }
 
-//----------------------------------------------------------------------------//
-void CTabControl::OnTcnSelchange(NMHDR *pNMHDR, LRESULT *pResult)
+void CTabControl::OnTcnSelchange(NMHDR* /*pNMHDR*/, LRESULT* pResult)
 {
     int curSel = CTabCtrl::GetCurSel();
     assert(curSel != -1);
@@ -92,7 +98,6 @@ void CTabControl::OnTcnSelchange(NMHDR *pNMHDR, LRESULT *pResult)
     *pResult = 0;
 }
 
-//----------------------------------------------------------------------------//
 void CTabControl::layoutCurrentWindow()
 {
     int curSel = CTabCtrl::GetCurSel();
@@ -107,13 +112,9 @@ void CTabControl::layoutCurrentWindow()
     CRect clRc;
     CTabCtrl::GetClientRect(&clRc);
     clRc.top += lpRect.bottom;
+    --clRc.right;
 
     clRc.InflateRect(-2, -2);
 
     currentWindow->second->MoveWindow(&clRc, TRUE);
-}
-
-BOOL CTabControl::OnEraseBkgnd(CDC* pDC)
-{
-    return TRUE;
 }

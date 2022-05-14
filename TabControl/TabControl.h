@@ -29,9 +29,17 @@ public:
     LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
                    _In_ std::shared_ptr<CDialog> tabDialog, UINT nIDTemplate);
 
+    /// <summary>
+    /// Get window from tab control by index
+    /// </summary>
+    /// <param name="index">Tab index</param>
+    /// <returns>Inserted in tab window by requested index</returns>
+    std::shared_ptr<CWnd> GetTabWindow(LONG index);
+
 public:
     DECLARE_MESSAGE_MAP()
 
+    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
     afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg void OnTcnSelchange(NMHDR *pNMHDR, LRESULT *pResult);
 
@@ -42,6 +50,4 @@ private:
 private:
     // диалоги для каждой вкладки
     std::map<LONG, std::shared_ptr<CWnd>> m_tabWindows;
-public:
-    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 };
