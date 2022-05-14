@@ -104,6 +104,8 @@ private:
     void OnPaintHorizontal(CDC& dc);
     void OnPaintVertical(CDC& dc);
 
+    double GetControlWidthInPixels() const;
+
     void NormalizePositions();
     void SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const;
 
