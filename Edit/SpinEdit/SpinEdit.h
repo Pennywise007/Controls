@@ -1,83 +1,71 @@
+/*************************************************************************************************
+	This control allows you to use CEdit connected to CSpinButton
+
+	To process messages from CSpinCtrl, you need to catch messages with the CEdit ID that you created
+	To set a separate identifier, use a special constructor
+
+	For additional configuration of CSpinCtrl, use the GetSpinCtrl() function
+
+	You can catch ON_NOTIFY_REFLECT(UDN_DELTAPOS, &CClass::OnDeltapos) and return 1 if you want to specify changes
+*************************************************************************************************/
 #pragma once
 
 #include "afxwin.h"
+#include "afxcmn.h"
 #include <memory>
 #include <utility>
+
+#include <Controls/SpinButton/SpinButton.h>
 #include <Controls/Edit/CEditBase/CEditBase.h>
-/*************************************************************************************************
-	Данный контрол позволяет использовать CEdit соединенный с CSpinButtonCtrl
 
-	Для обработки сообщений от CSpinCtrl необходимо ловить сообщения с идентификатором CEdit`а который вы создали
-	Для задания отдельного идентификатора воспользуйтесь специальным конструктором
-
-	Для дополнительной настройки CSpinCtrl используйте фунецию GetSpinCtrl()
-*************************************************************************************************/
-class CMySpinCtrl : public CSpinButtonCtrl
+namespace spin_edit {
+// Align side for spin buttons control
+enum class SpinAlign
 {
-public:
-	CMySpinCtrl();
-	virtual ~CMySpinCtrl() {};
-
-	DECLARE_MESSAGE_MAP()
-public:
-	// установка диапозона
-	void SetRange32(_In_	int	   Left,	_In_  int	 Right);
-	void SetRange64(_In_	float  Left,	_In_  float  Right);
-	void GetRange64(_Out_	float &Left,	_Out_ float &Right);
-	// установка флагов события изменения нажатия на контрол будут обрабатываться родительским классом
-	void SetUseCustomDeltaPos(_In_opt_ bool bUseCustom = true);
-	bool GetUseCustomDeltaPos();
-protected:
-	bool m_bNeedCustomDeltaPos;				// функция DeltaPos будет обрабатываться родительским классом
-	std::pair<float, float> m_SpinRange;	// границы контрола
-public:
-	afx_msg BOOL OnDeltapos(NMHDR *pNMHDR, LRESULT *pResult);
+	LEFT  = UDS_ALIGNLEFT,
+	RIGHT = UDS_ALIGNRIGHT
 };
-//*************************************************************************************************
-namespace SpinEdit
-{
-	// перечень типов привязки спина
-	enum SpinAligns
-	{
-		LEFT  = UDS_ALIGNLEFT,
-		RIGHT = UDS_ALIGNRIGHT
-	};
-}
-//*************************************************************************************************
+} // namespace spin_edit
+
 class CSpinEdit :
 	public CEditBase
 {
-public:	//*****************************************************************************************
-	CSpinEdit();	// стандартный конструктор, в качестве идентификатора для спинконтрола будет задан ID эдита
-	CSpinEdit(_In_ UINT SpinID);	// конструктор с возможностью задать ID спинконтрола
+public:
+	// Undefined spin control id, if not specified - spin conrtrol using Id of the edit
+	inline static constexpr UINT kUndefinedControlId = -1;
+	CSpinEdit(_In_opt_ UINT controlID = kUndefinedControlId);
 	~CSpinEdit();
-public:	//*****************************************************************************************
-	// установка привязки спинконтрола относительно эдита
-	void SetSpinAlign(_In_opt_ SpinEdit::SpinAligns Align = SpinEdit::RIGHT);
-	// установка границ для спинконтрола
-	void SetRange32(_In_ int Left, _In_ int Right);
-	void SetRange64(_In_ float Left, _In_ float Right);
-	void GetRange(_Out_ float &Left, _Out_ float &Right);
-	//*********************************************************************************************
-	void SetSpinWidth(_In_ int NewWidth);					// установка ширины спинконтрола
-	int GetSpinWidth() { return m_SpinWidth; };				// получаем ширину спинконтрола
-	CMySpinCtrl *GetSpinCtrl() { return m_SpinCtrl.get(); }	// получаем указатель на спинконтрол
-	//*********************************************************************************************
+public:
+	// Managing range of values
+	void SetRange(_In_ double Left, _In_ double Right);
+	void GetRange(_Out_ double& Left, _Out_ double& Right) const;
+
 	void GetWindowRect(LPRECT lpRect) const;
 	void GetClientRect(LPRECT lpRect) const;
-	//*********************************************************************************************
+
 	void UsePositiveDigitsOnly(_In_opt_ bool bUsePositiveDigitsOnly = true) override;
-private://*****************************************************************************************
+	void SetMinMaxLimits(_In_ double MinVal, _In_ double MaxVal) override { SetRange(MinVal, MaxVal); };
+
+	// Getting spin control for managing
+	CSpinButton* GetSpinCtrl() const { return m_spinCtrl.get(); }
+
+	// Setting spin control align side
+	void SetSpinAlign(_In_opt_ spin_edit::SpinAlign Align = spin_edit::SpinAlign::RIGHT);
+
+	// Managing spin control width
+	void SetSpinWidth(_In_ int NewWidth);
+	int GetSpinWidth() const { return m_spinWidth; };
+private:
 	void InitEdit();	// иницилизация контрола
 	void ReposCtrl(_In_opt_ const CRect& EditRect);	// перемасштабирование контрола
-private://*****************************************************************************************
-	std::unique_ptr<CMySpinCtrl> m_SpinCtrl;		// экземпляр спин контрола
-	SpinEdit::SpinAligns m_SpinAlign;	            // привязка спина
-	std::pair<float, float> m_SpinRange;	        // границы контрола
-	int m_SpinWidth;					            // ширина контрола
-	int m_SpinCtrlID;					            // идентификатор спинконтрола
+private:
+	std::unique_ptr<CSpinButton> m_spinCtrl;		// экземпляр спин контрола
+	spin_edit::SpinAlign m_spinAlign;	            // привязка спина
+	std::pair<double, double> m_spinRange;	        // границы контрола
+	int m_spinWidth;					            // ширина контрола
+	int m_spinCtrlID;					            // идентификатор спинконтрола
 	bool m_bFromCreate;					            // флаг того что контрол создан не динамически
-protected://***************************************************************************************
+protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	virtual void PreSubclassWindow();
@@ -86,5 +74,4 @@ public:
 	afx_msg void OnWindowPosChanged(WINDOWPOS* lpwndpos);
 	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
     afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);
-};	//*********************************************************************************************
-
+};

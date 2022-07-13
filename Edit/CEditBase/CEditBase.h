@@ -27,7 +27,7 @@ public:	//**********************************************************************
 	//*********************************************************************************************
 	// ограничения контрола по максимальному и минимальному значению
 	void SetUseCtrlLimits(_In_opt_ bool bUseLimits) { m_bUseLimits = bUseLimits; }
-	void SetMinMaxLimits (_In_ double MinVal, _In_ double MaxVal);
+	virtual void SetMinMaxLimits (_In_ double MinVal, _In_ double MaxVal);
 	//*********************************************************************************************
 	void SetTooltip(_In_opt_ LPCTSTR lpszToolTipText = nullptr); // lpszToolTip == nullptr: disable tooltip
 	CToolTipCtrl* GetToolTipCtrl() { return m_ptooltip.get(); }
