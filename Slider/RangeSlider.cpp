@@ -341,10 +341,15 @@ void CRangeSlider::SetPositions(_In_ std::pair<double, double> positions, _In_ b
     ASSERT(positions.first <= positions.second);
     if (positions.first > positions.second)
         std::swap(positions.first, positions.second);
+    if (m_thumbsPosition == positions)
+        return;
 
+    const auto previousThumbPositions = m_thumbsPosition;
     m_thumbsPosition = std::move(positions);
 
-    NormalizePositions();
+    if (!NormalizePositions() && previousThumbPositions != m_thumbsPosition)
+        SendChangePositionEvent(previousThumbPositions);
+
     if (redraw)
         Invalidate();
 }
@@ -381,7 +386,7 @@ void CRangeSlider::SetTooltipTextFormat(const wchar_t* format)
     m_tooltipFormat = format;
 }
 
-void CRangeSlider::NormalizePositions()
+bool CRangeSlider::NormalizePositions()
 {
     const auto previousThumbPositions = m_thumbsPosition;
     if (m_thumbsPosition.first < m_range.first)
@@ -404,6 +409,7 @@ void CRangeSlider::NormalizePositions()
 
     if (previousThumbPositions != m_thumbsPosition)
         SendChangePositionEvent(previousThumbPositions);
+    return previousThumbPositions != m_thumbsPosition;
 }
 
 void CRangeSlider::SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const

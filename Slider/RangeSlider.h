@@ -106,7 +106,8 @@ private:
 
     double GetControlWidthInPixels() const;
 
-    void NormalizePositions();
+    // return true if value changed
+    bool NormalizePositions();
     void SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const;
 
     void ShowSliderTooltip(bool left, bool createTip = false);
@@ -115,7 +116,7 @@ private:
 
 private:
     std::optional<double> m_incrementStep;                      // increment step of moving thumb
-    std::pair<double, double> m_range = { 0., 1.};              // minimum and maximum positions for track bar
+    std::pair<double, double> m_range = { 0, 100.};              // minimum and maximum positions for track bar
     std::pair<double, double> m_thumbsPosition = m_range;       // thumb positions on track bar
     std::pair<CRect, CRect> m_thumbsRects;                      // rectangles of the Left and Right thumb
 
