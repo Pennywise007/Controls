@@ -15,9 +15,10 @@ bool is_key_pressed(UINT keyCode)
     return GetKeyState(keyCode) & 0x8000;
 }
 
-} // namespace 
+} // namespace
+
 static CString sExpandAllGroups;
-static CString sCallapseAllGroups;
+static CString sCollapseAllGroups;
 
 static CString sGroupBy;
 static CString sDisableGrouping;
@@ -44,13 +45,14 @@ BEGIN_MESSAGE_MAP(CListGroupCtrl, CListCtrl)
     ON_WM_KEYUP()
     ON_WM_KEYDOWN()
     ON_WM_SIZE()
+    ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
 CListGroupCtrl::CListGroupCtrl()
 {
 #ifdef _TRANSLATE	// перевод через <Dialog_ZET/Translate.h>
     sExpandAllGroups	= TranslateString(L"Развернуть все группы");
-    sCallapseAllGroups	= TranslateString(L"Свернуть все группы");
+    sCollapseAllGroups	= TranslateString(L"Свернуть все группы");
     sGroupBy			= TranslateString(L"Группировать по");
     sDisableGrouping	= TranslateString(L"Отменить группировку");
     sCheckGroup			= TranslateString(L"Выбрать все элементы группы");
@@ -62,7 +64,7 @@ CListGroupCtrl::CListGroupCtrl()
     sCollapseGroup		= TranslateString(L"Свернуть группу");
 #else
     sExpandAllGroups	= L"Развернуть все группы";
-    sCallapseAllGroups	= L"Свернуть все группы";
+    sCollapseAllGroups	= L"Свернуть все группы";
     sGroupBy			= L"Группировать по";
     sDisableGrouping	= L"Отменить группировку";
     sCheckGroup			= L"Выбрать все элементы группы";
@@ -150,7 +152,7 @@ bool CListGroupCtrl::CheckInsertedElement(_In_ int nItem, _In_ int nGroupID, _In
         }
         // сохраняем новый элемент
         m_DeletedItems.push_back({ FALSE, lvi });
-        m_DeletedItems.back().ColumnsText.push_back(NewText);
+        m_DeletedItems.back().ColumnsText.emplace_back(std::move(NewText));
 
         bRes = false;
     }
@@ -731,7 +733,7 @@ void CListGroupCtrl::OnContextMenu(CWnd* pWnd, CPoint point)
                 if (IsGroupStateEnabled())
                 {
                     menu.InsertMenu(5, uFlags, 7, sExpandAllGroups);	// Expand all groups
-                    menu.InsertMenu(6, uFlags, 8, sCallapseAllGroups);	// Collapse all groups
+                    menu.InsertMenu(6, uFlags, 8, sCollapseAllGroups);	// Collapse all groups
                 }
                 menu.InsertMenu(7, uFlags, 9, sDisableGrouping);		// Disable grouping
             }
@@ -951,7 +953,7 @@ BOOL CListGroupCtrl::SetGroupSubtitle(int nGroupID, const CString& subtitle)
     lg.cchSubtitle = bstrSubtitle.Length();
 #endif
 
-    if (SetGroupInfo(nGroupID, (PLVGROUP)&lg) == -1)
+    if (SetGroupInfo(nGroupID, &lg) == -1)
         return FALSE;
 
     return TRUE;
@@ -985,7 +987,7 @@ BOOL CListGroupCtrl::SetGroupTitleImage(int nGroupID, int nImage, const CString&
         // Bottom description is drawn under the top description text when there is
         // a title image, no extended image, and uAlign==LVGA_HEADER_CENTER.
         lg.mask |= LVGF_DESCRIPTIONBOTTOM;
-        lg.pszDescriptionBottom = (LPWSTR)(LPCTSTR)bottomDesc;
+        lg.pszDescriptionBottom = (LPWSTR)bottomDesc.GetString();
         lg.cchDescriptionBottom = bottomDesc.GetLength();
     }
 #else
@@ -1098,27 +1100,29 @@ BOOL CListGroupCtrl::OnListItemChanged(NMHDR* pNMHDR, LRESULT* /*pResult*/)
     // отрабатываем изменение состояния чека элементов на основной кнопке
     if ((pNMLV->uChanged & LVIF_STATE) && (CListCtrl::GetExtendedStyle() & LVS_EX_CHECKBOXES))
     {
+        const auto newState = pNMLV->uNewState & LVIS_STATEIMAGEMASK;
+        if ((newState & 0x2000) == 0 && (newState & 0x1000) == 0)
+            return FALSE;
+
         // проверяем нужно ли поменять состояние основного чекбокса
-        bool bAllChecked(true);
+        bool bAllChecked(newState & 0x2000);
         // ищем по отображаемым данным, есть ли там запрашиваемый жлемент
-        for (int Row = 0, nItemsCount = CListCtrl::GetItemCount(); Row < nItemsCount; ++Row)
+        for (int Row = 0, nItemsCount = CListCtrl::GetItemCount(); bAllChecked && Row < nItemsCount; ++Row)
         {
-            if (CListCtrl::GetCheck(Row) == BST_UNCHECKED)
-            {
-                bAllChecked = false;
-                break;
-            }
+            bAllChecked = CListCtrl::GetCheck(Row) == BST_CHECKED;
         }
 
         CHeaderCtrl* header = CListCtrl::GetHeaderCtrl();
         HDITEM hdi = { 0 };
         hdi.mask = HDI_FORMAT;
         Header_GetItem(*header, 0, &hdi);
+        const auto prevFormat = hdi.fmt;
         if (bAllChecked)
             hdi.fmt |= HDF_CHECKED;
         else
             hdi.fmt &= ~HDF_CHECKED;
-        Header_SetItem(*header, 0, &hdi);
+        if (prevFormat != hdi.fmt)
+            Header_SetItem(*header, 0, &hdi);
     }
 
     return FALSE;	// Let parent-dialog get chance
@@ -1204,6 +1208,9 @@ void CListGroupCtrl::PreSubclassWindow()
         dwHeaderStyle |= HDS_CHECKBOXES;
         ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
     }
+
+    // fix flickering headers
+    CListCtrl::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
 }
 
 BOOL CListGroupCtrl::ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags /*= 0*/)
@@ -1223,14 +1230,13 @@ BOOL CListGroupCtrl::ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_
 
 void CListGroupCtrl::AutoScaleColumns()
 {
-    CRect Rect;
-    GetClientRect(Rect);
-
-    int CountColumns = GetHeaderCtrl()->GetItemCount();
-
+    const int CountColumns = GetHeaderCtrl()->GetItemCount();
     if (CountColumns != 0)
     {
-        int Width = Rect.Width() / CountColumns;
+        CRect Rect;
+        GetClientRect(Rect);
+
+        const int Width = Rect.Width() / CountColumns;
         for (int Column = 0; Column < CountColumns; Column++)
             CListCtrl::SetColumnWidth(Column, Width);
     }
@@ -1244,13 +1250,10 @@ void CListGroupCtrl::FitToContentColumn(int nCol, bool bIncludeHeaderContent)
 
 void CListGroupCtrl::FindItems(_In_ CString sFindString)
 {
-    std::list<CString> FindVect;
-    FindVect.push_back(sFindString);
-
-    FindItems(FindVect);
+    FindItems(std::list<CString>{ std::move(sFindString) });
 }
 
-void CListGroupCtrl::FindItems(_In_ std::list<CString>& sFindStrings, _In_opt_ bool bMatchAll /*= false*/)
+void CListGroupCtrl::FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll /*= false*/)
 {
     m_sFindStrings = sFindStrings;
     m_bMatchAll = bMatchAll;
@@ -1276,12 +1279,12 @@ void CListGroupCtrl::FindItems(_In_ std::list<CString>& sFindStrings, _In_opt_ b
     {
         // флаг того, что в строчке есть элементы удовлетворяющие поиску
         bool bFind = bMatchAll;
-        for (auto& it : sFindStrings)
+        for (auto&& it : sFindStrings)
         {
             if (bMatchAll)// првоеряем что строчка таблицы должна совпадать со всеми элементами вектора
-                bFind &= FindItemInTable(it, Row);
+                bFind &= FindItemInTable(std::move(it), Row);
             else // првоеряем что строчка таблицы должна совпадать хотябы с одним элементом вектора
-                bFind |= FindItemInTable(it, Row);
+                bFind |= FindItemInTable(std::move(it), Row);
         }
 
         // если строчка не совпала с существующими, то удаляем ее
@@ -1307,7 +1310,7 @@ void CListGroupCtrl::FindItems(_In_ std::list<CString>& sFindStrings, _In_opt_ b
     Resort();
 }
 
-bool CListGroupCtrl::FindItemInTable(_In_ CString psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive /*= false*/)
+bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive /*= false*/)
 {
     const unsigned nTotalRows = CListCtrl::GetItemCount();
     const int nTotalColumns = CListCtrl::GetHeaderCtrl()->GetItemCount();
@@ -1316,7 +1319,7 @@ bool CListGroupCtrl::FindItemInTable(_In_ CString psSearchText, _In_ unsigned Ro
     {
         for (int Column = 0; Column < nTotalColumns; ++Column)
         {
-            CString sColumnText = CListCtrl::GetItemText(RowNumber, Column);
+            CString&& sColumnText = CListCtrl::GetItemText(RowNumber, Column);
             if (!bCaseSensitive)
             {
                 sColumnText = sColumnText.MakeLower();
@@ -1391,10 +1394,10 @@ int CListGroupCtrl::GetCurrentRowIndex(_In_ int nRow)
     }
 
     // ищем по удаленным элементам
-    for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end();)
+    for (const auto& item : m_DeletedItems)
     {
-        if (it->ItemData.lParam == nRow)
-            return it->ItemData.iItem;
+        if (item.ItemData.lParam == nRow)
+            return item.ItemData.iItem;
     }
 
     return nRow;
@@ -1459,7 +1462,7 @@ void CListGroupCtrl::GetCheckedList(_Out_ std::vector<int>& CheckedList, _In_opt
                 CheckedList.push_back((int)GetItemData(Row));
         }
 
-        for (auto& it : m_DeletedItems)
+        for (const auto& it : m_DeletedItems)
         {
             if (it.bChecked)
                 CheckedList.push_back((int)it.ItemData.lParam);
@@ -1534,13 +1537,58 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
     }
 }
 
+BOOL CListGroupCtrl::OnEraseBkgnd(CDC* pDC)
+{
+    // fix flickering
+    CRect clientRect;
+    GetClientRect(&clientRect);
+
+    if (CHeaderCtrl* pHeadCtrl = GetHeaderCtrl())
+    {
+        CRect  rcHead;
+        pHeadCtrl->GetWindowRect(&rcHead);
+        const auto nHeadHeight = rcHead.Height();
+        clientRect.top += nHeadHeight;
+    }
+
+    CRect itemsRect;
+    if (const auto nItems = GetItemCount())
+    {
+        CPoint  ptItem;
+        CRect   rcItem;
+
+        GetItemRect(nItems - 1, &rcItem, LVIR_BOUNDS);
+        GetItemPosition(nItems - 1, &ptItem);
+
+        itemsRect.top = clientRect.top;
+        itemsRect.left = ptItem.x;
+        itemsRect.right = rcItem.right;
+        itemsRect.bottom = rcItem.bottom;
+
+        if (GetExtendedStyle() & LVS_EX_CHECKBOXES)
+            itemsRect.left -= GetSystemMetrics(SM_CXEDGE) + 16;
+    }
+
+    CBrush brush(GetBkColor());
+    if (itemsRect.IsRectEmpty())
+        pDC->FillRect(clientRect, &brush);
+    else
+    {
+        if (itemsRect.left > clientRect.left)     // fill left rectangle
+            pDC->FillRect(CRect(0, clientRect.top, itemsRect.left, clientRect.bottom), &brush);
+        if (itemsRect.bottom < clientRect.bottom) // fill bottom rectangle
+            pDC->FillRect(CRect(0, itemsRect.bottom, clientRect.right, clientRect.bottom), &brush);
+        if (itemsRect.right < clientRect.right)   // fill right rectangle
+            pDC->FillRect(CRect(itemsRect.right, clientRect.top, clientRect.right, clientRect.bottom), &brush);
+    }
+
+    return TRUE;
+}
+
 bool CListGroupCtrl::bIsNeedToRestoreDeletedItem(std::list<DeletedItemsInfo>::iterator Item)
 {
-    bool bDelete(false);
-
     // проверяем что элемент удовлетворяет условиям поиска
     bool bFind = m_bMatchAll;
-    CString sColumnText;
     for (auto& String : m_sFindStrings)
     {
         bool bFindInColumn = false;
@@ -1559,6 +1607,7 @@ bool CListGroupCtrl::bIsNeedToRestoreDeletedItem(std::list<DeletedItemsInfo>::it
             bFind |= bFindInColumn;
     }
 
+    bool bDelete(false);
     // если этот элемент удовлетворяет условиям поиска то восстанавливаем его, если нет то переходим к следующему
     if (bFind)
     {

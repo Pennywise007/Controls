@@ -116,7 +116,7 @@ public:	//**********************************************************************
     // поиск по таблице
     void FindItems(_In_ CString sFindString);
     // bMatchAll - если true то ищем совпадение со всеми элементами массива, если false - то хотябы с одним
-    void FindItems(_In_ std::list<CString> &sFindStrings, _In_opt_ bool bMatchAll = false);
+    void FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll = false);
     //*********************************************************************************************
     // возвращает текущий индекс у ранее добавленного элемента
     int GetCurrentRowIndex(_In_ int nRow);
@@ -183,6 +183,7 @@ protected://********************************************************************
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg void OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg void OnSize(UINT nType, int cx, int cy);
+    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
     //*********************************************************************************************
     DECLARE_MESSAGE_MAP()
 protected://***************************************************************************************
@@ -233,7 +234,7 @@ protected://********************************************************************
     std::map<int, double> m_columnsProportions;
 protected://***************************************************************************************
     // поиск текста в заданной строке таблицы
-    bool FindItemInTable(_In_ CString psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive = false);
+    bool FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive = false);
     // проверка на необходимость восстановить удаленный элемент
     bool bIsNeedToRestoreDeletedItem(std::list<DeletedItemsInfo>::iterator Item);
     void CheckElements(bool bChecked);
