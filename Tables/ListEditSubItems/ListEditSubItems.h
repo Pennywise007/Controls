@@ -62,14 +62,14 @@ struct LVSubItemParams
     // упрощенное обращение к указателю на структуру
     typedef std::shared_ptr<LVSubItemParams> Ptr;
 
-    LVSubItemParams(int iItem, int iSubItem, int iGroup)
-        : iItem(iItem), iSubItem(iSubItem), iGroup(iGroup)
-    {};
+    explicit LVSubItemParams(int _iItem, int _iSubItem, int _iGroup) noexcept
+        : iItem(_iItem), iSubItem(_iSubItem), iGroup(_iGroup)
+    {}
 
     // параметры редактируемого элемента
-    int iItem;
-    int iSubItem;
-    int iGroup;
+    const int iItem;
+    const int iSubItem;
+    const int iGroup;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,7 +117,7 @@ public:
     // @param editorControl - редактируемый контрол
     // @param pParams - структура с параметрами о ячейке для которой создается контрол
     // @param bAcceptResult - пользователь завершил редактирование применением изменений
-    typedef std::function<void(CListCtrl* pList,
+    typedef std::function<bool(CListCtrl* pList,
                                CWnd* editorControl,
                                const LVSubItemParams* pParams,
                                bool bAcceptResult)> onEndEditSubItemFunc;
@@ -133,6 +133,8 @@ public:
                                     const createEditorControlFunc& createFunc,
                                     const onEndEditSubItemFunc& endEditFunc = nullptr,
                                     const onShowControlCallback& onShowControl = nullptr);
+
+    void EditItem(int item, int subItem);
 
 protected://********************************************************************
     DECLARE_MESSAGE_MAP()
@@ -196,9 +198,8 @@ class SubItemEditorControllerBase : public ISubItemEditorController
 {
 public:
     SubItemEditorControllerBase() = default;
-    virtual ~SubItemEditorControllerBase() = default;
 
-    // ISubItemEditorController
+// ISubItemEditorController
 public:
     // создать контрол для редактирования, создает поле ввода для редактирования текста
     std::shared_ptr<CWnd> createEditorControl(CListCtrl* pList,

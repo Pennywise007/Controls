@@ -56,7 +56,7 @@ CListEditSubItems<CBaseList>::getSubItemEditorController(int iSubItem)
 {
     std::shared_ptr<ISubItemEditorController> editorController;
     // проверяем задан ли контроллер для этой колонки
-    auto editorControllerIt = m_subItemsEditorControllers.find(iSubItem);
+    const auto editorControllerIt = m_subItemsEditorControllers.find(iSubItem);
     if (editorControllerIt != m_subItemsEditorControllers.end())
     {
         // если сказали что колонка не редактируется - выходим
@@ -112,10 +112,9 @@ inline void CListEditSubItems<CBaseList>::setSubItemEditorController(int iSubIte
                               const LVSubItemParams* pParams,
                               bool bAcceptResult) override
         {
-            if (m_endEditFunc)
-                m_endEditFunc(pList, editorControl, pParams, bAcceptResult);
-            else
-                SubItemEditorControllerBase::onEndEditSubItem(pList, editorControl, pParams, bAcceptResult);
+            if (m_endEditFunc && !m_endEditFunc(pList, editorControl, pParams, bAcceptResult))
+                return;
+            SubItemEditorControllerBase::onEndEditSubItem(pList, editorControl, pParams, bAcceptResult);
         }
 
     public:
@@ -125,6 +124,81 @@ inline void CListEditSubItems<CBaseList>::setSubItemEditorController(int iSubIte
     };
 
     setSubItemEditorController(iSubItem, std::make_shared<SubItemEditorControllerCustom>(createFunc, endEditFunc, onShowControl));
+}
+
+//----------------------------------------------------------------------------//
+template <typename CBaseList>
+void CListEditSubItems<CBaseList>::EditItem(int item, int subItem)
+{
+    LVITEM lvi = { 0 };
+    lvi.mask = LVIF_GROUPID;
+    lvi.iItem = item;
+    VERIFY(CBaseList::GetItem(&lvi));
+
+    LVITEMINDEX htItemIndex;
+    htItemIndex.iItem = item;
+    htItemIndex.iGroup = lvi.iGroupId;
+
+    // получаем размер ячейки
+    CRect htItemRect;
+    if (!CBaseList::GetItemIndexRect(&htItemIndex, subItem, LVIR_LABEL, htItemRect))
+    {
+        assert(false);  // не смогли получить область куда был клик
+        return;
+    }
+    CBaseList::ClientToScreen(htItemRect);
+
+    // remove previous edit window
+    if (m_editSubItemWindow)
+        m_editSubItemWindow.reset();
+
+    // получаем фабрику для ячейки
+    std::shared_ptr<ISubItemEditorController> editorController = getSubItemEditorController(subItem);
+    if (!editorController)
+        return;
+
+    const LVSubItemParams::Ptr params = std::make_shared<LVSubItemParams>(item, subItem, lvi.iGroupId);
+
+    // создаем окно редактирования сообщения
+    m_editSubItemWindow = IEditSubItemWindow::createWindow(htItemRect, params);
+    if (!::IsWindow(m_editSubItemWindow->m_hWnd))
+    {
+        assert(false);
+        m_editSubItemWindow.reset();
+        return;
+    }
+
+    // создаем контрол
+    std::shared_ptr<CWnd> editorControl =
+        editorController->createEditorControl(this,
+                                              m_editSubItemWindow.get(),
+                                              params.get());
+    if (!editorControl || !::IsWindow(editorControl->m_hWnd))
+    {
+        m_editSubItemWindow.reset();
+        return;
+    }
+
+    // проставляем владельца чтобы сообщения шли нам
+    m_editSubItemWindow->SetOwner(this);
+
+    // проставляем шрифт от таблицы
+    editorControl->SetFont(CBaseList::GetFont());
+
+    // ставим контрол на место
+    CRect editControlRect;
+    m_editSubItemWindow->GetClientRect(editControlRect);
+    editorControl->MoveWindow(editControlRect);
+
+    editorControl->SetWindowText(CBaseList::GetItemText(item, subItem));
+
+    // выделяем весь текст
+    ::PostMessage(editorControl->m_hWnd, EM_SETSEL, 0, editorControl->GetWindowTextLengthW());
+
+    // сообщаем нашему окну редактирования о вставленном в него контроле
+    m_editSubItemWindow->setInternalControl(editorControl);
+
+    editorController->onShowControl(editorControl.get());
 }
 
 //----------------------------------------------------------------------------//
@@ -153,7 +227,7 @@ afx_msg void CListEditSubItems<CBaseList>::OnLButtonDblClk(UINT nFlags,
     CBaseList::OnLButtonDblClk(nFlags, point);
     // CMT: Select the item the user clicked on.
     UINT uFlags;
-    int nItem = CBaseList::HitTest(point, &uFlags);
+    const int nItem = CBaseList::HitTest(point, &uFlags);
 
     // CMT: If the click has been made on some valid item
     if (-1 != nItem)
@@ -163,78 +237,12 @@ afx_msg void CListEditSubItems<CBaseList>::OnLButtonDblClk(UINT nFlags,
             LVHITTESTINFO hti;
             hti.pt = point;
             hti.flags = LVM_SUBITEMHITTEST;
-
             CBaseList::SubItemHitTest(&hti);
 
-            LVITEMINDEX htItemIndex;
-            htItemIndex.iItem = hti.iItem;
-            htItemIndex.iGroup = hti.iGroup;
-
-            // получаем размер ячейки
-            CRect htItemRect;
-            if (!CBaseList::GetItemIndexRect(&htItemIndex, hti.iSubItem,
-                                             LVIR_LABEL, htItemRect))
-            {
-                assert(false);  // не смогли получить область куда был клик
-                return;
-            }
-            CBaseList::ClientToScreen(htItemRect);
-
             if (m_editSubItemWindow)
-            {
                 assert(false);   // предыдущее должно быть уже уничтожено
-                m_editSubItemWindow.reset();
-            }
 
-            // получаем фабрику для ячейки
-            std::shared_ptr<ISubItemEditorController> editorController =
-                getSubItemEditorController(hti.iSubItem);
-            if (!editorController)
-                return;
-
-            const LVSubItemParams::Ptr params =
-                std::make_shared<LVSubItemParams>(hti.iItem, hti.iSubItem, hti.iGroup);
-
-            // создаем окно редактирования сообщения
-            m_editSubItemWindow = IEditSubItemWindow::createWindow(htItemRect, params);
-            if (!::IsWindow(m_editSubItemWindow->m_hWnd))
-            {
-                assert(false);
-                m_editSubItemWindow.reset();
-                return;
-            }
-
-            // создаем контрол
-            std::shared_ptr<CWnd> editorControl =
-                editorController->createEditorControl(this,
-                                                      m_editSubItemWindow.get(),
-                                                      params.get());
-            if (!editorControl || !::IsWindow(editorControl->m_hWnd))
-            {
-                m_editSubItemWindow.reset();
-                return;
-            }
-
-            // проставляем владельца чтобы сообщения шли нам
-            m_editSubItemWindow->SetOwner(this);
-
-            // проставляем шрифт от таблицы
-            editorControl->SetFont(CBaseList::GetFont());
-
-            // ставим контрол на место
-            CRect editControlRect;
-            m_editSubItemWindow->GetClientRect(editControlRect);
-            editorControl->MoveWindow(editControlRect);
-
-            editorControl->SetWindowText(CBaseList::GetItemText(hti.iItem, hti.iSubItem));
-
-            // выделяем весь текст
-            ::PostMessage(editorControl->m_hWnd, EM_SETSEL, 0, editorControl->GetWindowTextLengthW());
-
-            // сообщаем нашему окну редактирования о вставленном в него контроле
-            m_editSubItemWindow->setInternalControl(editorControl);
-
-            editorController->onShowControl(editorControl.get());
+            EditItem(hti.iItem, hti.iSubItem);
         }
     }
 }
