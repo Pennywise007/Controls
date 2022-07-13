@@ -6,46 +6,26 @@
 #include <cmath>
 #include <list>
 
-Layout::~Layout()
-{
-    ASSERT(m_defaultWindowProc.empty());
-
-    for (auto&& [hWnd, defWindowProc] : m_defaultWindowProc)
-    {
-        ::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)defWindowProc);
-    }
-}
+#include "../DefaultWindowProc.h"
 
 Layout& Layout::Instance()
 {
-    static Layout s;
-    return s;
+    static Layout instance;
+    return instance;
 }
 
-void Layout::TryAttachToWindowProc(HWND hWnd)
+void Layout::CheckNecessityToHandleOnSizeChangedEvent(const CWnd& window)
 {
-    if (m_defaultWindowProc.find(hWnd) == m_defaultWindowProc.end())
-        m_defaultWindowProc[hWnd] = (WNDPROC)::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WindowProc);
-}
-
-void Layout::CheckNecessityToHandleDefProc(HWND hWnd)
-{
-    if (const auto it = m_defaultWindowProc.find(hWnd); it != m_defaultWindowProc.end())
+    if (m_anchoredWindows.find(window.m_hWnd) == m_anchoredWindows.end() &&
+        m_onSizeChangedCallbacks.find(window.m_hWnd) == m_onSizeChangedCallbacks.end())
     {
-        if (m_anchoredWindows.find(hWnd) == m_anchoredWindows.end() &&
-            m_boundedWindows.find(hWnd) == m_boundedWindows.end() &&
-            m_minimumSizeWindows.find(hWnd) == m_minimumSizeWindows.end() &&
-            m_onSizeChangedCallbacks.find(hWnd) == m_onSizeChangedCallbacks.end())
-        {
-            ::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)it->second);
-            m_defaultWindowProc.erase(it);
-        }
+        DefaultWindowProc::RemoveCallback(window, WM_WINDOWPOSCHANGED, reinterpret_cast<LPVOID>(this));
     }
 }
 
-void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, int ratio)
+void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio)
 {
-    ASSERT(who && ::IsWindow(who.m_hWnd));
+    ASSERT(::IsWindow(who));
     ASSERT(anchoredSides.any());
     if (anchorTargetSide == AnchorSide::eLeft || anchorTargetSide == AnchorSide::eRight)
         ASSERT(!anchoredSides.test(static_cast<size_t>(AnchorSide::eTop)) && !anchoredSides.test(static_cast<size_t>(AnchorSide::eBottom)));
@@ -58,11 +38,17 @@ void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSid
         AnchorTargetInfo::AnchoredWindowInfo{ std::move(anchoredSides), anchorTargetSide,  ratio,
                                                 GetWindowRect(who.m_hWnd), GetWindowRect(anchorTarget.m_hWnd, who.m_hWnd) });
 
-    anchor.TryAttachToWindowProc(anchorTarget.m_hWnd);
+    DefaultWindowProc::OnWindowMessage(anchorTarget, WM_WINDOWPOSCHANGED, [](HWND hWnd, WPARAM wParam, LPARAM lParam, auto)
+        {
+            Instance().OnWindowPosChanged(hWnd, wParam, lParam);
+        }, reinterpret_cast<LPVOID>(&anchor));
 }
 
-void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, int ratio)
+void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio)
 {
+    if (ratio == 0)
+        return AnchorRemove(who, anchorTarget, anchoredSides);
+
     AnchoredSides anchoredBits;
     for (const auto& side : anchoredSides)
     {
@@ -73,7 +59,7 @@ void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::
 
 void Layout::AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& removingAnchoredForSides)
 {
-    ASSERT(who && ::IsWindow(who.m_hWnd));
+    ASSERT(::IsWindow(who));
     ASSERT(removingAnchoredForSides.size() > 0);
 
     auto& anchor = Instance();
@@ -89,9 +75,9 @@ void Layout::AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::
     // remove all anchors for given sides
     for (auto anchorInfo = anchorWindow->second.begin(); anchorInfo != anchorWindow->second.end();)
     {
-        for (auto& removingSide : removingAnchoredForSides)
+        for (const auto& removingSide : removingAnchoredForSides)
         {
-            anchorInfo->anchoredSides.set((size_t)removingSide, false);
+            anchorInfo->anchoredSides.set(static_cast<size_t>(removingSide), false);
         }
 
         if (anchorInfo->anchoredSides.none())
@@ -107,15 +93,15 @@ void Layout::AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::
         if (targetWindow->second.anchoredWindows.empty())
         {
             anchor.m_anchoredWindows.erase(targetWindow);
-            anchor.CheckNecessityToHandleDefProc(anchorTarget.m_hWnd);
+            anchor.CheckNecessityToHandleOnSizeChangedEvent(anchorTarget);
         }
     }
 }
 
 void Layout::SetWindowBounds(CWnd& wnd, BoundsType type, std::optional<LONG> left, std::optional<LONG> top, std::optional<LONG> right, std::optional<LONG> bottom)
 {
-    ASSERT(::IsWindow(wnd.m_hWnd));
-    ASSERT(type != BoundsType::eOffsetFromParentBounds || ::IsWindow(wnd.GetParent()->m_hWnd));
+    ASSERT(::IsWindow(wnd));
+    ASSERT(type != BoundsType::eOffsetFromParentBounds || ::IsWindow(*wnd.GetParent()));
 
     auto& anchor = Instance();
 
@@ -125,7 +111,7 @@ void Layout::SetWindowBounds(CWnd& wnd, BoundsType type, std::optional<LONG> lef
         if (it != anchor.m_boundedWindows.end())
         {
             anchor.m_boundedWindows.erase(it);
-            anchor.CheckNecessityToHandleDefProc(wnd.m_hWnd);
+            DefaultWindowProc::RemoveCallback(wnd, WM_WINDOWPOSCHANGING, reinterpret_cast<LPVOID>(&anchor));
         }
         return;
     }
@@ -141,12 +127,15 @@ void Layout::SetWindowBounds(CWnd& wnd, BoundsType type, std::optional<LONG> lef
     if (boundInfo.ApplyBoundsToRect(wnd.m_hWnd, rect))
         wnd.MoveWindow(rect);
 
-    anchor.TryAttachToWindowProc(wnd.m_hWnd);
+    DefaultWindowProc::OnWindowMessage(wnd, WM_WINDOWPOSCHANGING, [](HWND hWnd, WPARAM wParam, LPARAM lParam, auto)
+                                       {
+                                           Instance().OnWindowPosChanging(hWnd, wParam, lParam);
+                                       }, reinterpret_cast<LPVOID>(&anchor));
 }
 
 void Layout::SetWindowMinimumSize(CWnd& wnd, std::optional<UINT> width, std::optional<UINT> height)
 {
-    ASSERT(::IsWindow(wnd.m_hWnd));
+    ASSERT(::IsWindow(wnd));
 
     auto& anchor = Instance();
 
@@ -156,7 +145,7 @@ void Layout::SetWindowMinimumSize(CWnd& wnd, std::optional<UINT> width, std::opt
         if (it != anchor.m_minimumSizeWindows.end())
         {
             anchor.m_minimumSizeWindows.erase(it);
-            anchor.CheckNecessityToHandleDefProc(wnd.m_hWnd);
+            DefaultWindowProc::RemoveCallback(wnd, WM_GETMINMAXINFO, reinterpret_cast<LPVOID>(&anchor));
         }
         return;
     }
@@ -180,173 +169,158 @@ void Layout::SetWindowMinimumSize(CWnd& wnd, std::optional<UINT> width, std::opt
                        SWP_NOACTIVATE | SWP_NOMOVE | SWP_DRAWFRAME | SWP_NOZORDER | SWP_NOCOPYBITS);
     }
 
-    anchor.TryAttachToWindowProc(wnd.m_hWnd);
+    DefaultWindowProc::OnWindowMessage(wnd, WM_GETMINMAXINFO, [](HWND hWnd, WPARAM wParam, LPARAM lParam, auto)
+                                       {
+                                           Instance().OnGetMinMaxInfo(hWnd, wParam, lParam);
+                                       }, reinterpret_cast<LPVOID>(&anchor));
 }
 
 void Layout::OnSizeChanged(CWnd& wnd, const Layout::OnSizeChangedCallback& onSizeChanged)
 {
-    ASSERT(::IsWindow(wnd.m_hWnd));
+    ASSERT(::IsWindow(wnd));
 
     auto& anchor = Instance();
     if (onSizeChanged)
     {
         anchor.m_onSizeChangedCallbacks[wnd.m_hWnd] = onSizeChanged;
-        anchor.TryAttachToWindowProc(wnd.m_hWnd);
+        DefaultWindowProc::OnWindowMessage(wnd, WM_WINDOWPOSCHANGED, [](HWND hWnd, WPARAM wParam, LPARAM lParam, auto)
+                                           {
+                                               Instance().OnWindowPosChanged(hWnd, wParam, lParam);
+                                           }, reinterpret_cast<LPVOID>(&anchor));
     }
     else
     {
         anchor.m_onSizeChangedCallbacks.erase(wnd.m_hWnd);
-        anchor.CheckNecessityToHandleDefProc(wnd.m_hWnd);
+        anchor.CheckNecessityToHandleOnSizeChangedEvent(wnd);
     }
 }
 
-LRESULT Layout::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+void Layout::OnWindowPosChanged(HWND hWnd, WPARAM /*wParam*/, LPARAM lParam)
 {
-    Layout& instance = Instance();
+    const auto* lpwndpos = reinterpret_cast<WINDOWPOS*>(lParam);
+    if ((lpwndpos->flags & SWP_NOMOVE) && (lpwndpos->flags & SWP_NOSIZE) &&
+        !(lpwndpos->flags & SWP_SHOWWINDOW) && !(lpwndpos->flags & SWP_FRAMECHANGED))
+        return;
 
-    const auto defaultWndProcIt = instance.m_defaultWindowProc.find(hWnd);
-    if (defaultWndProcIt == instance.m_defaultWindowProc.end())
+    if (!(lpwndpos->flags & SWP_NOSIZE))
     {
-        ASSERT(TRUE);
-        return S_FALSE;
+        const auto onSizeChangedIt = m_onSizeChangedCallbacks.find(hWnd);
+        if (onSizeChangedIt != m_onSizeChangedCallbacks.end())
+        {
+            CRect rect;
+            GetClientRect(hWnd, rect);
+            onSizeChangedIt->second(*CWnd::FromHandle(hWnd), rect.Width(), rect.Height());
+        }
     }
 
-    WNDPROC defaultWindowProc = defaultWndProcIt->second;
+    const auto anchorTargetIt = m_anchoredWindows.find(hWnd);
+    if (anchorTargetIt == m_anchoredWindows.end())
+        return;
 
-    switch (uMsg)
+    // In case of problem with drawing
+    // CWnd::FromHandle(hWnd)->RedrawWindow();
+
+    const HDWP hDWP = ::BeginDeferWindowPos((int)anchorTargetIt->second.anchoredWindows.size());
+
+    for (auto&& [attachedHwnd, anchoredInfo] : anchorTargetIt->second.anchoredWindows)
     {
-    case WM_WINDOWPOSCHANGED:
-        {
-            WINDOWPOS* lpwndpos = (WINDOWPOS*)lParam;
-            if ((lpwndpos->flags & SWP_NOMOVE) && (lpwndpos->flags & SWP_NOSIZE) &&
-                !(lpwndpos->flags & SWP_SHOWWINDOW) && !(lpwndpos->flags & SWP_FRAMECHANGED))
-                break;
-
-            if (!(lpwndpos->flags & SWP_NOSIZE))
-            {
-                const auto onSizeChangedIt = instance.m_onSizeChangedCallbacks.find(hWnd);
-                if (onSizeChangedIt != instance.m_onSizeChangedCallbacks.end())
-                {
-                    CRect rect;
-                    GetClientRect(hWnd, rect);
-                    onSizeChangedIt->second(*CWnd::FromHandle(hWnd), rect.Width(), rect.Height());
-                }
-            }
-
-            const auto anchorTargetIt = instance.m_anchoredWindows.find(hWnd);
-            if (anchorTargetIt == instance.m_anchoredWindows.end())
-                break;
-
-            CWnd::FromHandle(hWnd)->RedrawWindow();
-
-            HDWP hDWP = ::BeginDeferWindowPos(anchorTargetIt->second.anchoredWindows.size());
-
-            for (auto&& [attachedHwnd, anchoredInfo] : anchorTargetIt->second.anchoredWindows)
-            {
-                ASSERT(!anchoredInfo.empty());
+        ASSERT(!anchoredInfo.empty());
 
 #ifdef DEBUG
-                CString str;
-                CWnd::FromHandle(attachedHwnd)->GetWindowText(str);
+        CString str;
+        if (::IsWindow(attachedHwnd))
+            CWnd::FromHandle(attachedHwnd)->GetWindowText(str);
+        else
+        {
+            CWnd::FromHandle(hWnd)->GetWindowText(str);
+            ASSERT(FALSE);
+        }
 #endif
 
-                const CRect currentTargetRect = GetWindowRect(hWnd, attachedHwnd);
-                std::optional<double> deltaLeft, deltaTop, deltaRight, deltaBottom;
+        const CRect currentTargetRect = GetWindowRect(hWnd, attachedHwnd);
+        std::optional<double> deltaLeft, deltaTop, deltaRight, deltaBottom;
 
-                for (auto& anchor : anchoredInfo)
-                {
-                    ASSERT(anchor.anchoredSides.any());
-                    anchor.ApplyAnchors(currentTargetRect, deltaLeft, deltaTop, deltaRight, deltaBottom);
-                }
-
-                const auto currentWindowRect = GetWindowRect(attachedHwnd);
-                auto getInitialRectForSide = [anchors = &anchoredInfo](AnchorSide side) -> const CRect&
-                {
-                    const auto it = std::find_if(anchors->cbegin(), anchors->cend(),
-                                                 [&side](const AnchorTargetInfo::AnchoredWindowInfo& info)
-                                                 {
-                                                     return info.anchoredSides.test((size_t)side);
-                                                 });
-                    ASSERT(it != anchors->cend());
-                    return it->initialWindowRect;
-                };
-
-                CRect newRect = currentWindowRect;
-                if (deltaLeft.has_value())
-                    newRect.left = getInitialRectForSide(AnchorSide::eLeft).left + (LONG)round(*deltaLeft);
-                if (deltaTop.has_value())
-                    newRect.top = getInitialRectForSide(AnchorSide::eTop).top + (LONG)round(*deltaTop);
-                if (deltaRight.has_value())
-                    newRect.right = getInitialRectForSide(AnchorSide::eRight).right + (LONG)round(*deltaRight);
-                if (deltaBottom.has_value())
-                    newRect.bottom = getInitialRectForSide(AnchorSide::eBottom).bottom + (LONG)round(*deltaBottom);
-
-                if (newRect != currentWindowRect)
-                {
-                   /* ::SetWindowPos(attachedHwnd, HWND_TOP, newRect.left, newRect.top,
-                                   newRect.Width(), newRect.Height(),
-                                   SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE | SWP_NOCOPYBITS);*/
-                    ::DeferWindowPos(hDWP, attachedHwnd, HWND_TOP, newRect.left, newRect.top,
-                                     newRect.Width(), newRect.Height(),
-                                     SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE | SWP_NOCOPYBITS);
-                }
-            }
-
-            ::EndDeferWindowPos(hDWP);
-
-        }
-        break;
-    case WM_WINDOWPOSCHANGING:
+        for (auto& anchor : anchoredInfo)
         {
-            WINDOWPOS* lpwndpos = (WINDOWPOS*)lParam;
-            if ((lpwndpos->flags & SWP_NOMOVE) && (lpwndpos->flags & SWP_NOSIZE))
-                break;
-
-            const auto boundIt = instance.m_boundedWindows.find(hWnd);
-            if (boundIt == instance.m_boundedWindows.end())
-                break;
-
-            CRect newControlRect = GetWindowRect(hWnd);
-            if (!(lpwndpos->flags & SWP_NOMOVE) && ::IsWindow(GetParent(hWnd)))
-            {
-                newControlRect.OffsetRect(-newControlRect.TopLeft());
-                newControlRect.OffsetRect(lpwndpos->x, lpwndpos->y);
-            }
-            if (!(lpwndpos->flags & SWP_NOSIZE))
-            {
-                newControlRect.right = newControlRect.left + lpwndpos->cx;
-                newControlRect.bottom = newControlRect.top + lpwndpos->cy;
-            }
-
-            if (boundIt->second.ApplyBoundsToRect(hWnd, newControlRect))
-            {
-                lpwndpos->x = newControlRect.left;
-                lpwndpos->y = newControlRect.top;
-                lpwndpos->cx = newControlRect.Width();
-                lpwndpos->cy = newControlRect.Height();
-            }
+            ASSERT(anchor.anchoredSides.any());
+            anchor.ApplyAnchors(currentTargetRect, deltaLeft, deltaTop, deltaRight, deltaBottom);
         }
-        break;
-    case WM_GETMINMAXINFO:
+
+        const auto currentWindowRect = GetWindowRect(attachedHwnd);
+        auto getInitialRectForSide = [anchors = &anchoredInfo](AnchorSide side) -> const CRect&
         {
-            if (const auto it = instance.m_minimumSizeWindows.find(hWnd); it != instance.m_minimumSizeWindows.end())
-            {
-                auto* info = (MINMAXINFO*)lParam;
-                POINT minSize = { (LONG)it->second.width.value_or(MAXLONG64), (LONG)it->second.height.value_or(MAXLONG64) };
-                info->ptMinTrackSize = std::move(minSize);
-            }
-        }
-        break;
-    case WM_DESTROY:
+            const auto it = std::find_if(anchors->cbegin(), anchors->cend(),
+                                         [&side](const AnchorTargetInfo::AnchoredWindowInfo& info)
+                                         {
+                                             return info.anchoredSides.test((size_t)side);
+                                         });
+            ASSERT(it != anchors->cend());
+            return it->initialWindowRect;
+        };
+
+        CRect newRect = currentWindowRect;
+        if (deltaLeft.has_value())
+            newRect.left = getInitialRectForSide(AnchorSide::eLeft).left + (LONG)round(*deltaLeft);
+        if (deltaTop.has_value())
+            newRect.top = getInitialRectForSide(AnchorSide::eTop).top + (LONG)round(*deltaTop);
+        if (deltaRight.has_value())
+            newRect.right = getInitialRectForSide(AnchorSide::eRight).right + (LONG)round(*deltaRight);
+        if (deltaBottom.has_value())
+            newRect.bottom = getInitialRectForSide(AnchorSide::eBottom).bottom + (LONG)round(*deltaBottom);
+
+        if (newRect != currentWindowRect)
         {
-            // restore def window proc
-            ::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)defaultWindowProc);
-            instance.m_defaultWindowProc.erase(defaultWndProcIt);
+            /* ::SetWindowPos(attachedHwnd, HWND_TOP, newRect.left, newRect.top,
+                            newRect.Width(), newRect.Height(),
+                            SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE | SWP_NOCOPYBITS);*/
+            ::DeferWindowPos(hDWP, attachedHwnd, HWND_TOP, newRect.left, newRect.top,
+                             newRect.Width(), newRect.Height(),
+                             SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE | SWP_NOCOPYBITS);
         }
-        break;
     }
 
-    return ::CallWindowProc(defaultWindowProc, hWnd, uMsg, wParam, lParam);
+    ::EndDeferWindowPos(hDWP);
+}
+
+void Layout::OnWindowPosChanging(HWND hWnd, WPARAM /*wParam*/, LPARAM lParam)
+{
+    WINDOWPOS* lpwndpos = (WINDOWPOS*)lParam;
+    if ((lpwndpos->flags & SWP_NOMOVE) && (lpwndpos->flags & SWP_NOSIZE))
+        return;
+
+    const auto boundIt = m_boundedWindows.find(hWnd);
+    if (boundIt == m_boundedWindows.end())
+        return;
+
+    CRect newControlRect = GetWindowRect(hWnd);
+    if (!(lpwndpos->flags & SWP_NOMOVE) && ::IsWindow(GetParent(hWnd)))
+    {
+        newControlRect.OffsetRect(-newControlRect.TopLeft());
+        newControlRect.OffsetRect(lpwndpos->x, lpwndpos->y);
+    }
+    if (!(lpwndpos->flags & SWP_NOSIZE))
+    {
+        newControlRect.right = newControlRect.left + lpwndpos->cx;
+        newControlRect.bottom = newControlRect.top + lpwndpos->cy;
+    }
+
+    if (boundIt->second.ApplyBoundsToRect(hWnd, newControlRect))
+    {
+        lpwndpos->x = newControlRect.left;
+        lpwndpos->y = newControlRect.top;
+        lpwndpos->cx = newControlRect.Width();
+        lpwndpos->cy = newControlRect.Height();
+    }
+}
+
+void Layout::OnGetMinMaxInfo(HWND hWnd, WPARAM /*wParam*/, LPARAM lParam)
+{
+    if (const auto it = m_minimumSizeWindows.find(hWnd); it != m_minimumSizeWindows.end())
+    {
+        auto* info = (MINMAXINFO*)lParam;
+        POINT minSize = { (LONG)it->second.width.value_or(MAXLONG64), (LONG)it->second.height.value_or(MAXLONG64) };
+        info->ptMinTrackSize = std::move(minSize);
+    }
 }
 
 CRect Layout::GetWindowRect(HWND hWnd, HWND hAttachingWindow /*= nullptr*/)

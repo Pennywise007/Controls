@@ -16,7 +16,8 @@ enum class AnchorSide : size_t
     eLeft,
     eTop,
     eRight,
-    eBottom
+    eBottom,
+    eCount
 };
 
 /*
@@ -41,7 +42,9 @@ enum class AnchorSide : size_t
 class Layout
 {
 public: // anchoring controls
-    typedef std::bitset<sizeof(AnchorSide)> AnchoredSides;
+    typedef std::bitset<static_cast<size_t>(AnchorSide::eCount)> AnchoredSides;
+
+    static constexpr auto AllAnchorSides = { AnchorSide::eLeft, AnchorSide::eTop, AnchorSide::eRight, AnchorSide::eBottom };
 
     /// <summary>
     /// Layout window to target window side
@@ -51,9 +54,9 @@ public: // anchoring controls
     /// <param name="anchoredSides">Sides of anchored window</param>
     /// <param name="anchorTargetSide">Target side for anchoring another window</param>
     /// <param name="ratio">Aspect ratio when changing sides of anchoring window</param>
-    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, int ratio);
-    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, int ratio);
-    static void AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& removingAnchoredForSides);
+    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio);
+    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio);
+    static void AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& removingAnchoredForSides = AllAnchorSides);
 
 public: // setting control moving and sizing bounds
     enum class BoundsType
@@ -70,10 +73,15 @@ public: // callbacks
     typedef std::function<void(CWnd& window, int newWidth, int newHeight)> OnSizeChangedCallback;
     // Setting on size changed callback.If width changed - newWidth != empty, if height changed - newHeight != empty
     static void OnSizeChanged(CWnd& wnd, const OnSizeChangedCallback& onSizeChanged);
+
+private:
+    void OnWindowPosChanged(HWND hWnd, WPARAM wParam, LPARAM lParam);
+    void OnWindowPosChanging(HWND hWnd, WPARAM wParam, LPARAM lParam);
+    void OnGetMinMaxInfo(HWND hWnd, WPARAM wParam, LPARAM lParam);
+
 private:
     // allow creating only from instance
     Layout() = default;
-    ~Layout();
 
     Layout(const Layout&) = delete;
     Layout& operator=(const Layout&) = delete;
@@ -82,14 +90,8 @@ private:
     static Layout& Instance();
     // calc window rect
     static CRect GetWindowRect(HWND hWnd, HWND hAttachingWindow = nullptr);
-    // checking if we already attached to window def window proc, if no - attach
-    void TryAttachToWindowProc(HWND hWnd);
     // if we don`t need to handle def window proc but we do - detach
-    void CheckNecessityToHandleDefProc(HWND hWnd);
-    // proxy window proc for applying anchors
-    static LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-    // list of default window proc
-    std::map<HWND, WNDPROC> m_defaultWindowProc;
+    void CheckNecessityToHandleOnSizeChangedEvent(const CWnd& window);
 
 private:    // anchors
     struct AnchorTargetInfo
@@ -101,7 +103,7 @@ private:    // anchors
             // side of target window for applying window anchors
             AnchorSide anchorSide;
             // ratio for moving sides on anchors
-            int ratio;
+            unsigned ratio;
             // initial window rect for anchored window
             CRect initialWindowRect;
             // initial rect of target window
