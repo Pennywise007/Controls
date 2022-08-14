@@ -1,6 +1,5 @@
 #include "IconButton.h"
 
-
 #include <afxglobals.h>
 #include <afxtoolbarimages.h>
 #include <atlimage.h>
@@ -105,21 +104,20 @@ HICON CIconButton::SetIcon(_In_ HICON hIcon,
         ICONINFO info;
         if (GetIconInfo(hIcon, &info))
         {
-            BITMAP m_bitmap;
-            if (GetObject(info.hbmColor, sizeof(m_bitmap), &m_bitmap))
+            BITMAP bitmap;
+            if (GetObject(info.hbmColor, sizeof(bitmap), &bitmap))
             {
                 if (IconWidth  == kUseImageSize)
-                    IconWidth  = m_bitmap.bmWidth;
+                    IconWidth  = bitmap.bmWidth;
                 if (IconHeight == kUseImageSize)
-                    IconHeight = m_bitmap.bmHeight;
+                    IconHeight = bitmap.bmHeight;
             }
-            DeleteObject(&m_bitmap);
+            DeleteObject(&bitmap);
         }
         DeleteObject(&info);
     }
-    m_IconSize.SetSize(IconWidth, IconHeight);
 
-    m_image.SetImageSize(m_IconSize);
+    m_image.SetImageSize(SIZE{ IconWidth, IconHeight });
     m_image.SetTransparentColor(GetGlobalData()->clrBtnFace);
     m_image.AddIcon(hIcon, TRUE);
     m_Alignment = Alignment;
@@ -175,20 +173,19 @@ void CIconButton::SetBitmap(_In_ CBitmap& hBitmap,
 
     if (BitmapWidth == kUseImageSize || BitmapHeight == kUseImageSize)
     {
-        BITMAP m_bitmap;
-        if (hBitmap.GetBitmap(&m_bitmap))
+        BITMAP bitmap;
+        if (hBitmap.GetBitmap(&bitmap))
         {
             if (BitmapWidth == kUseImageSize)
-                BitmapWidth = m_bitmap.bmWidth;
+                BitmapWidth = bitmap.bmWidth;
             if (BitmapHeight == kUseImageSize)
-                BitmapHeight = m_bitmap.bmHeight;
+                BitmapHeight = bitmap.bmHeight;
         }
 
-        DeleteObject(&m_bitmap);
+        DeleteObject(&bitmap);
     }
-    m_IconSize.SetSize(BitmapWidth, BitmapHeight);
 
-    m_image.SetImageSize(m_IconSize);
+    m_image.SetImageSize(SIZE{ BitmapWidth, BitmapHeight });
     m_image.SetTransparentColor(useTransparentColor ? transparentColor : GetGlobalData()->clrBtnFace);
     m_image.AddImage((HBITMAP)hBitmap.Detach(), TRUE);
     m_Alignment = Alignment;
@@ -312,36 +309,36 @@ void CIconButton::RepositionItems()
         switch (m_Alignment)
         {
             case LeftCenter:
-                m_IconPos.SetPoint(m_lOffset, ControlRect.CenterPoint().y - m_IconSize.cy / 2);
+                m_IconPos.SetPoint(m_lOffset, ControlRect.CenterPoint().y - m_image.GetImageSize().cy / 2);
 
                 m_TextRect.top = ControlRect.top + m_lOffset;
                 m_TextRect.bottom = ControlRect.bottom - m_lOffset;
-                m_TextRect.left = m_IconPos.x + m_IconSize.cx + m_lOffset;
+                m_TextRect.left = m_IconPos.x + m_image.GetImageSize().cx + m_lOffset;
                 m_TextRect.right = ControlRect.right - m_lOffset;
                 break;
             case CenterTop:
-                m_IconPos.SetPoint(ControlRect.CenterPoint().x - m_IconSize.cx / 2, m_lOffset);
-                m_TextRect.top = m_IconSize.cy + m_lOffset;
+                m_IconPos.SetPoint(ControlRect.CenterPoint().x - m_image.GetImageSize().cx / 2, m_lOffset);
+                m_TextRect.top = m_image.GetImageSize().cy + m_lOffset;
                 m_TextRect.bottom = ControlRect.bottom - m_lOffset;
                 m_TextRect.left = ControlRect.left + m_lOffset;
                 m_TextRect.right = ControlRect.right - m_lOffset;
                 break;
             case CenterBottom:
-                m_IconPos.SetPoint(ControlRect.CenterPoint().x - m_IconSize.cx / 2, ControlRect.Height() - m_IconSize.cy);
+                m_IconPos.SetPoint(ControlRect.CenterPoint().x - m_image.GetImageSize().cx / 2, ControlRect.Height() - m_image.GetImageSize().cy);
                 m_TextRect.top = ControlRect.top + m_lOffset;
-                m_TextRect.bottom = ControlRect.bottom - m_IconSize.cy - m_lOffset;
+                m_TextRect.bottom = ControlRect.bottom - m_image.GetImageSize().cy - m_lOffset;
                 m_TextRect.left = ControlRect.left + m_lOffset;
                 m_TextRect.right = ControlRect.right - m_lOffset;
                 break;
             case RightCenter:
-                m_IconPos.SetPoint(ControlRect.Width() - m_IconSize.cx - m_lOffset, ControlRect.CenterPoint().y - m_IconSize.cy / 2);
+                m_IconPos.SetPoint(ControlRect.Width() - m_image.GetImageSize().cx - m_lOffset, ControlRect.CenterPoint().y - m_image.GetImageSize().cy / 2);
                 m_TextRect.top = ControlRect.top + m_lOffset;
                 m_TextRect.bottom = ControlRect.bottom - m_lOffset;
                 m_TextRect.left = ControlRect.left + m_lOffset;
-                m_TextRect.right = ControlRect.right - m_IconSize.cx - m_lOffset;
+                m_TextRect.right = ControlRect.right - m_image.GetImageSize().cx - m_lOffset;
                 break;
             case CenterCenter:
-                m_IconPos.SetPoint(ControlRect.CenterPoint().x - m_IconSize.cx / 2, ControlRect.CenterPoint().y - m_IconSize.cy / 2);
+                m_IconPos.SetPoint(ControlRect.CenterPoint().x - m_image.GetImageSize().cx / 2, ControlRect.CenterPoint().y - m_image.GetImageSize().cy / 2);
                 m_TextRect.SetRectEmpty();
                 break;
             default:
