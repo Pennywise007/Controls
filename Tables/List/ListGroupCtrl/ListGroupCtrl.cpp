@@ -40,7 +40,7 @@ BEGIN_MESSAGE_MAP(CListGroupCtrl, CListCtrl)
 #if _WIN32_WINNT >= 0x0600
     ON_NOTIFY_REFLECT_EX(LVN_LINKCLICK, OnGroupTaskClick)	// Column Click
 #endif
-    ON_NOTIFY(HDN_ITEMSTATEICONCLICK, 0, &CListGroupCtrl::OnHdnItemStateIconClick)
+    ON_NOTIFY_EX(HDN_ITEMSTATEICONCLICK, 0, OnHdnItemStateIconClick)
     ON_NOTIFY_REFLECT_EX(LVN_ITEMCHANGED, OnListItemChanged)    // изменение в листе
     ON_WM_KEYUP()
     ON_WM_KEYDOWN()
@@ -50,7 +50,7 @@ END_MESSAGE_MAP()
 
 CListGroupCtrl::CListGroupCtrl()
 {
-#ifdef _TRANSLATE	// перевод через <Dialog_ZET/Translate.h>
+#ifdef _TRANSLATE
     sExpandAllGroups	= TranslateString(L"Развернуть все группы");
     sCollapseAllGroups	= TranslateString(L"Свернуть все группы");
     sGroupBy			= TranslateString(L"Группировать по");
@@ -151,7 +151,7 @@ bool CListGroupCtrl::CheckInsertedElement(_In_ int nItem, _In_ int nGroupID, _In
                 DeletedItem.ItemData.iItem++;
         }
         // сохраняем новый элемент
-        m_DeletedItems.push_back({ FALSE, lvi });
+        m_DeletedItems.emplace_back(DeletedItemsInfo{ FALSE, lvi });
         m_DeletedItems.back().ColumnsText.emplace_back(std::move(NewText));
 
         bRes = false;
@@ -201,7 +201,7 @@ int CListGroupCtrl::InsertColumn(_In_ int nCol, _In_ LPCTSTR lpszColumnHeading, 
                                  _In_opt_ int nSubItem /*= -1*/, _In_opt_ std::function<int(const CString&, const CString&)> SortFunct /*= nullptr*/)
 {
     if (SortFunct != nullptr)
-        m_SortFunct.push_back(std::make_pair(nCol, SortFunct));
+        m_SortFunct.emplace_back(std::make_pair(nCol, SortFunct));
 
     const int Res = CListCtrl::InsertColumn(nCol, lpszColumnHeading, nFormat, nWidth, nSubItem);
 
@@ -224,19 +224,27 @@ int CListGroupCtrl::InsertColumn(_In_ int nCol, _In_ const LVCOLUMN* pColumn)
     return CListCtrl::InsertColumn(nCol, pColumn);
 }
 
-void CListGroupCtrl::SetProportionalResizingColumns(const std::initializer_list<int>& columns)
+void CListGroupCtrl::SetProportionalResizingColumns(const std::unordered_set<int>& columns)
 {
     m_columnsProportions.clear();
+    if (columns.empty())
+        return;
 
     CRect clientRect;
     GetClientRect(clientRect);
-    const auto controlWidth = (double)clientRect.Width();
+    int availableWidth = clientRect.Width();
 
     const auto columnsCount = GetHeaderCtrl()->GetItemCount();
+    for (int column = 0; column < columnsCount; ++column)
+    {
+        if (columns.find(column) == columns.end())
+            availableWidth -= GetColumnWidth(column);
+    }
+
     for (auto& column : columns)
     {
         VERIFY(column < columnsCount);
-        m_columnsProportions[column] = controlWidth / double(GetColumnWidth(column));
+        m_columnsProportions[column] = (double)availableWidth / double(GetColumnWidth(column));
     }
 }
 
@@ -546,7 +554,7 @@ BOOL CListGroupCtrl::GroupByColumn(int nCol)
 
     CWaitCursor waitCursor;
 
-    SetSortArrow(-1, false);
+    SetSortArrow(-1, SortType::eNone);
 
     SetRedraw(FALSE);
 
@@ -776,16 +784,17 @@ void CListGroupCtrl::OnContextMenu(CWnd* pWnd, CPoint point)
 namespace {
 struct PARAMSORT
 {
-    HWND m_hWnd;
+    CListCtrl* m_control;
     int  m_ColumnIndex;
-    bool m_Ascending;
+    CListGroupCtrl::SortType m_sortType;
     CSimpleMap<int, CString> m_GroupNames;
     std::function<int(CString, CString)> m_SortFunction;
 
-    PARAMSORT(HWND hWnd, int nCol, bool bAscending, const std::function<int(CString, CString)>& sortFunc = _tcscmp)
-        : m_hWnd(hWnd)
+    explicit PARAMSORT(CListCtrl* control, int nCol, CListGroupCtrl::SortType sortType,
+                       const std::function<int(CString, CString)>& sortFunc = _tcscmp)
+        : m_control(control)
         , m_ColumnIndex(nCol)
-        , m_Ascending(bAscending)
+        , m_sortType(sortType)
         , m_SortFunction(sortFunc)
     {}
 
@@ -807,13 +816,18 @@ int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
     PARAMSORT* ps = (PARAMSORT*)lParamSort;
 
     TCHAR left[256] = _T(""), right[256] = _T("");
-    ListView_GetItemText(ps->m_hWnd, lParam1, ps->m_ColumnIndex, left, sizeof(left));
-    ListView_GetItemText(ps->m_hWnd, lParam2, ps->m_ColumnIndex, right, sizeof(right));
+    ListView_GetItemText(ps->m_control->m_hWnd, lParam1, ps->m_ColumnIndex, left, sizeof(left));
+    ListView_GetItemText(ps->m_control->m_hWnd, lParam2, ps->m_ColumnIndex, right, sizeof(right));
 
-    if (ps->m_Ascending)
+    switch (ps->m_sortType)
+    {
+    case CListGroupCtrl::SortType::eNone:
+        return ps->m_control->GetItemData(lParam1) < ps->m_control->GetItemData(lParam2);
+    case CListGroupCtrl::SortType::eAscending:
         return ps->m_SortFunction(left, right);
-    else
+    case CListGroupCtrl::SortType::eDescending:
         return ps->m_SortFunction(right, left);
+    }
 }
 
 int CALLBACK SortFuncGroup(int nLeftId, int nRightId, void* lParamSort)
@@ -823,15 +837,18 @@ int CALLBACK SortFuncGroup(int nLeftId, int nRightId, void* lParamSort)
     const CString& left = ps->LookupGroupName(nLeftId);
     const CString& right = ps->LookupGroupName(nRightId);
 
-    if (ps->m_Ascending)
+    if (ps->m_sortType != CListGroupCtrl::SortType::eDescending)
         return _tcscmp(left, right);
     else
         return _tcscmp(right, left);
 }
 }
 
-bool CListGroupCtrl::SortColumn(int columnIndex, bool ascending)
+bool CListGroupCtrl::SortColumn(int columnIndex, SortType sortType)
 {
+    m_SortCol = columnIndex;
+    m_sortType = sortType;
+
     CWaitCursor waitCursor;
 
     const auto it = std::find_if(m_SortFunct.begin(), m_SortFunct.end(),
@@ -840,7 +857,7 @@ bool CListGroupCtrl::SortColumn(int columnIndex, bool ascending)
                                      return Element.first == columnIndex;
                                  });
 
-    PARAMSORT paramSort(m_hWnd, columnIndex, ascending);
+    PARAMSORT paramSort(this, columnIndex, sortType);
 
     if (it != std::end(m_SortFunct))
         paramSort.m_SortFunction = it->second;
@@ -877,6 +894,7 @@ bool CListGroupCtrl::SortColumn(int columnIndex, bool ascending)
         ListView_SortItemsEx(m_hWnd, SortFunc, &paramSort);
     }
 
+    SetSortArrow(m_SortCol, m_sortType);
     return true;
 }
 
@@ -1077,18 +1095,27 @@ BOOL CListGroupCtrl::OnHeaderClick(NMHDR* pNMHDR, LRESULT* /*pResult*/)
     const NMLISTVIEW* pLV = reinterpret_cast<NMLISTVIEW*>(pNMHDR);
 
     const int nCol = pLV->iSubItem;
+    SortType sortType;
+
     if (m_SortCol == nCol)
     {
-        m_Ascending = !m_Ascending;
+        switch (m_sortType)
+        {
+        case SortType::eNone:
+            sortType = SortType::eAscending;
+            break;
+        case SortType::eAscending:
+            sortType = SortType::eDescending;
+            break;
+        case SortType::eDescending:
+            sortType = SortType::eNone;
+            break;
+        }
     }
     else
-    {
-        m_SortCol = nCol;
-        m_Ascending = true;
-    }
+        sortType = SortType::eAscending;
 
-    SortColumn(m_SortCol, m_Ascending);
-    SetSortArrow(m_SortCol, m_Ascending);
+    SortColumn(nCol, sortType);
     return FALSE;	// Let parent-dialog get chance
 }
 
@@ -1131,15 +1158,15 @@ BOOL CListGroupCtrl::OnListItemChanged(NMHDR* pNMHDR, LRESULT* /*pResult*/)
 void CListGroupCtrl::Resort()
 {
     if (m_SortCol >= 0)
-        SortColumn(m_SortCol, m_Ascending);
+        SortColumn(m_SortCol, m_sortType);
 }
 
-void CListGroupCtrl::SetSortArrow(int colIndex, bool ascending)
+void CListGroupCtrl::SetSortArrow(int colIndex, SortType sortType)
 {
     // Для задания собственной иконки сортировки необходимо загрузить BMP изображения в проект с идентификаторами:
     // IDB_DOWNARROW для сортировки вниз и IDB_UPARROW для сортировки вверх
 #if defined(IDB_DOWNARROW) && defined(IDB_UPARROW)
-    UINT bitmapID = m_Ascending ? IDB_DOWNARROW : IDB_UPARROW;
+    UINT bitmapID = sortType == SortType::eAscending ? IDB_DOWNARROW : IDB_UPARROW;
     for (int i = 0; i < GetHeaderCtrl()->GetItemCount(); ++i)
     {
         HDITEM hditem = { 0 };
@@ -1155,7 +1182,7 @@ void CListGroupCtrl::SetSortArrow(int colIndex, bool ascending)
             hditem.fmt &= ~(HDF_BITMAP | HDF_BITMAP_ON_RIGHT);
             VERIFY(CListCtrl::GetHeaderCtrl()->SetItem(i, &hditem));
         }
-        if (i == colIndex)
+        if (i == colIndex && sortType != SortType::eNone)
         {
             hditem.fmt |= HDF_BITMAP | HDF_BITMAP_ON_RIGHT;
             hditem.hbm = (HBITMAP)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(bitmapID), IMAGE_BITMAP, 0, 0, LR_LOADMAP3DCOLORS);
@@ -1164,8 +1191,9 @@ void CListGroupCtrl::SetSortArrow(int colIndex, bool ascending)
         }
     }
 #else
-    if (IsThemeEnabled())
 #if (_WIN32_WINNT >= 0x501)
+    if (IsThemeEnabled())
+    {
         for (int i = 0; i < GetHeaderCtrl()->GetItemCount(); ++i)
         {
             HDITEM hdItem = { 0 };
@@ -1174,10 +1202,21 @@ void CListGroupCtrl::SetSortArrow(int colIndex, bool ascending)
             hdItem.fmt &= ~(HDF_SORTDOWN | HDF_SORTUP);
             if (i == colIndex)
             {
-                hdItem.fmt |= ascending ? HDF_SORTDOWN : HDF_SORTUP;
+                switch (sortType)
+                {
+                case SortType::eAscending:
+                    hdItem.fmt |= HDF_SORTDOWN;
+                    break;
+                case SortType::eDescending:
+                    hdItem.fmt |= HDF_SORTUP;
+                    break;
+                default:
+                    break;
+                }
             }
             VERIFY(CListCtrl::GetHeaderCtrl()->SetItem(i, &hdItem));
         }
+    }
 #endif
 #endif
 }
@@ -1476,7 +1515,7 @@ BOOL CListGroupCtrl::DeleteAllItems()
     return CListCtrl::DeleteAllItems();
 }
 
-void CListGroupCtrl::OnHdnItemStateIconClick(NMHDR* pNMHDR, LRESULT* pResult)
+BOOL CListGroupCtrl::OnHdnItemStateIconClick(UINT,NMHDR* pNMHDR, LRESULT* pResult)
 {
     LPNMHEADER pNMHeader = (LPNMHEADER)pNMHDR;
 
@@ -1489,7 +1528,7 @@ void CListGroupCtrl::OnHdnItemStateIconClick(NMHDR* pNMHDR, LRESULT* pResult)
         CheckElements(bUnChecked == FALSE);
     }
 
-    *pResult = 0;
+    return FALSE;
 }
 
 void CListGroupCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
@@ -1529,10 +1568,17 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
 
     if (!m_columnsProportions.empty())
     {
-        const auto controlWidth = (double)cx;
+        int controlWidth = cx;
+        const auto columnsCount = GetHeaderCtrl()->GetItemCount();
+        for (int column = 0; column < columnsCount; ++column)
+        {
+            if (m_columnsProportions.find(column) == m_columnsProportions.end())
+                controlWidth -= GetColumnWidth(column);
+        }
+
         for (auto&& [columnIndex, proportion] : m_columnsProportions)
         {
-            SetColumnWidth(columnIndex, static_cast<int>(controlWidth / proportion));
+            SetColumnWidth(columnIndex, static_cast<int>((double)controlWidth / proportion));
         }
     }
 }

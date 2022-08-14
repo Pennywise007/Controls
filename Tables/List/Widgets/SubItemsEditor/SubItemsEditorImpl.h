@@ -2,7 +2,9 @@
 
 #include <cassert>
 
-#include "ListEditSubItems.h"
+#include "SubItemsEditor.h"
+
+namespace controls::list::widgets {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Абстрактный класс для окна редактирования текста
@@ -29,14 +31,13 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 // класс с возможностью редактировать ячейки списка
-BEGIN_TEMPLATE_MESSAGE_MAP(CListEditSubItems, CBaseList, CBaseList)
+BEGIN_TEMPLATE_MESSAGE_MAP(SubItemsEditor, CBaseList, CBaseList)
     ON_WM_LBUTTONDBLCLK()
-    ON_MESSAGE(WM_END_EDIT_SUB_ITEM, &CListEditSubItems::OnEndEditSubItem)
+    ON_MESSAGE(WM_END_EDIT_SUB_ITEM, &SubItemsEditor::OnEndEditSubItem)
 END_MESSAGE_MAP()
 
-//----------------------------------------------------------------------------//
 template <typename CBaseList>
-void CListEditSubItems<CBaseList>::
+void SubItemsEditor<CBaseList>::
 setSubItemEditorController(int iSubItem, std::shared_ptr<ISubItemEditorController> controller)
 {
     if (controller)
@@ -49,10 +50,9 @@ setSubItemEditorController(int iSubItem, std::shared_ptr<ISubItemEditorControlle
     }
 }
 
-//----------------------------------------------------------------------------//
 template<typename CBaseList>
 inline std::shared_ptr<ISubItemEditorController>
-CListEditSubItems<CBaseList>::getSubItemEditorController(int iSubItem)
+SubItemsEditor<CBaseList>::getSubItemEditorController(int iSubItem)
 {
     std::shared_ptr<ISubItemEditorController> editorController;
     // проверяем задан ли контроллер для этой колонки
@@ -74,9 +74,8 @@ CListEditSubItems<CBaseList>::getSubItemEditorController(int iSubItem)
     return editorController;
 }
 
-//----------------------------------------------------------------------------//
 template<typename CBaseList>
-inline void CListEditSubItems<CBaseList>::setSubItemEditorController(int iSubItem,
+inline void SubItemsEditor<CBaseList>::setSubItemEditorController(int iSubItem,
     const createEditorControlFunc& createFunc, const onEndEditSubItemFunc& endEditFunc, const onShowControlCallback& onShowControl)
 {
     class SubItemEditorControllerCustom : public SubItemEditorControllerBase
@@ -126,9 +125,8 @@ inline void CListEditSubItems<CBaseList>::setSubItemEditorController(int iSubIte
     setSubItemEditorController(iSubItem, std::make_shared<SubItemEditorControllerCustom>(createFunc, endEditFunc, onShowControl));
 }
 
-//----------------------------------------------------------------------------//
 template <typename CBaseList>
-void CListEditSubItems<CBaseList>::EditItem(int item, int subItem)
+void SubItemsEditor<CBaseList>::EditItem(int item, int subItem)
 {
     LVITEM lvi = { 0 };
     lvi.mask = LVIF_GROUPID;
@@ -201,9 +199,8 @@ void CListEditSubItems<CBaseList>::EditItem(int item, int subItem)
     editorController->onShowControl(editorControl.get());
 }
 
-//----------------------------------------------------------------------------//
 template <typename CBaseList>
-void CListEditSubItems<CBaseList>::PreSubclassWindow()
+void SubItemsEditor<CBaseList>::PreSubclassWindow()
 {
     CBaseList::PreSubclassWindow();
 
@@ -219,10 +216,8 @@ void CListEditSubItems<CBaseList>::PreSubclassWindow()
     CBaseList::SetExtendedStyle(extendedListStyle);
 }
 
-//----------------------------------------------------------------------------//
 template <typename CBaseList>
-afx_msg void CListEditSubItems<CBaseList>::OnLButtonDblClk(UINT nFlags,
-                                                           CPoint point)
+afx_msg void SubItemsEditor<CBaseList>::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
     CBaseList::OnLButtonDblClk(nFlags, point);
     // CMT: Select the item the user clicked on.
@@ -249,7 +244,7 @@ afx_msg void CListEditSubItems<CBaseList>::OnLButtonDblClk(UINT nFlags,
 
 //----------------------------------------------------------------------------//
 template <typename CBaseList>
-afx_msg LRESULT CListEditSubItems<CBaseList>::OnEndEditSubItem(WPARAM wParam,
+afx_msg LRESULT SubItemsEditor<CBaseList>::OnEndEditSubItem(WPARAM wParam,
                                                                LPARAM /*lParam*/)
 {
     // во время закрытия окна после OnOk или OnCancel может придти оповещение ещё раз из OnActivate
@@ -287,3 +282,5 @@ afx_msg LRESULT CListEditSubItems<CBaseList>::OnEndEditSubItem(WPARAM wParam,
 
     return 0;
 }
+
+} // namespace controls::list::widgets

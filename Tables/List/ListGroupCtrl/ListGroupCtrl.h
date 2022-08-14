@@ -3,7 +3,8 @@
 #include <list>
 #include <vector>
 #include <functional>
-#include <map>
+#include <unordered_set>
+#include <unordered_map>
 //*************************************************************************************************
 /*  Ремарки
     1) Для корректного перевода, добавьте в stdafx.h подключение библиотеки перевода
@@ -93,7 +94,7 @@ public:	//**********************************************************************
     // стандартное добавление колонки
     int InsertColumn(_In_ int nCol, _In_ const LVCOLUMN* pColumn);
     // Add list of columns which will keep the size on resize control
-    void SetProportionalResizingColumns(const std::initializer_list<int>& columns);
+    void SetProportionalResizingColumns(const std::unordered_set<int>& columns);
     //**********************************************************************************************
     // Перемещение элемента по списку
     // itemFirst - индекс перемещаемого элемента
@@ -146,11 +147,6 @@ public:	//**********************************************************************
     void SelectItem(int nItem, bool ensureVisible = true);
     void GetSelectedList(_Out_ std::vector<int> &selectedItems, _In_opt_ bool bCurrentIndexes = false) const;
     //*********************************************************************************************
-    // сортировка колонок
-    bool SortColumn(int columnIndex, bool ascending);
-    void SetSortArrow(int colIndex, bool ascending);
-    void Resort();
-    //*********************************************************************************************
     void CollapseAllGroups();	// свернуть все группы
     void ExpandAllGroups();		// развернуть все группы
     //*********************************************************************************************
@@ -165,12 +161,24 @@ public:	//**********************************************************************
     BOOL SetGroupSubtitle(int nGroupID, const CString& subtitle);
     BOOL SetGroupTitleImage(int nGroupID, int nImage, const CString& topDesc, const CString& bottomDesc);
 public://******************************************************************************************
-    // флаг обрабоной сортировки
-    bool Ascending() const		{ return m_Ascending; }
-    void Ascending(bool val)	{ m_Ascending = val; }
-    // номер колонки для сортировки
-    int  SortCol() const		{ return m_SortCol; }
-    void SortCol(int val)		{ m_SortCol = val; }
+    enum class SortType
+    {
+        eNone = 0,
+        eAscending,
+        eDescending,
+    };
+    bool SortColumn(int columnIndex, SortType sortType);
+    SortType GetSortType() const	{ return m_sortType; }
+    int  GetSortCol() const		    { return m_SortCol; }
+
+protected:
+    void SetSortArrow(int colIndex, SortType sortType);
+    void Resort();
+
+protected:
+    int m_SortCol = -1;			    // колонка для сортировки
+    SortType m_sortType = SortType::eNone;
+
 protected://***************************************************************************************
     virtual void PreSubclassWindow() override;
     //*********************************************************************************************
@@ -179,7 +187,7 @@ protected://********************************************************************
     afx_msg BOOL OnListItemChanged(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg BOOL OnGroupTaskClick(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
-    afx_msg void OnHdnItemStateIconClick(NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg BOOL OnHdnItemStateIconClick(UINT,NMHDR *pNMHDR, LRESULT *pResult);
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg void OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg void OnSize(UINT nType, int cx, int cy);
@@ -187,8 +195,7 @@ protected://********************************************************************
     //*********************************************************************************************
     DECLARE_MESSAGE_MAP()
 protected://***************************************************************************************
-    int m_SortCol = -1;			// колонка для сортировки
-    bool m_Ascending = false;   // обратная сортировка
+    
     //*********************************************************************************************
     struct DeletedItemsInfo
     {
@@ -229,9 +236,10 @@ protected://********************************************************************
     std::list<CString> m_sFindStrings;
     // список функций для сортировки каждой колонки
     std::vector<std::pair<int, std::function<int(CString, CString)>>> m_SortFunct;
+
     // list of columns widths, on resizing control all columns will be resize proportionally initial width
     // @see SetProportionalResizingColumns
-    std::map<int, double> m_columnsProportions;
+    std::unordered_map<int, double> m_columnsProportions;
 protected://***************************************************************************************
     // поиск текста в заданной строке таблицы
     bool FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive = false);

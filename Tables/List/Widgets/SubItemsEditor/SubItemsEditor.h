@@ -5,7 +5,7 @@
 Allow add custom edit field insode ListCtrl
 
 Usage:
-  CListEditSubItems m_listSearchStrings;
+  SubItemsEditor m_listSearchStrings;
   m_listSearchStrings.setSubItemEditorController(0,
         [](CListCtrl* pList, CWnd* parentWindow, const LVSubItemParams* pParams)
         {
@@ -55,6 +55,8 @@ Usage:
 #include <memory>
 #include <functional>
 
+namespace controls::list::widgets {
+
 ////////////////////////////////////////////////////////////////////////////////
 // Структура с параметрами редактируемой ячейки листа
 struct LVSubItemParams
@@ -94,10 +96,10 @@ interface ISubItemEditorController;
     в случаях если придет IDOK - изменения будут применены(в случае использования SubItemEditorControllerBase) и bAcceptResult == true
 */
 template <typename CBaseList = CListCtrl>
-class CListEditSubItems : public CBaseList
+class SubItemsEditor : public CBaseList
 {
 public:
-    CListEditSubItems() = default;
+    SubItemsEditor() = default;
 
 public:
     // задать контроллер для управления редактированием ячейки
@@ -223,5 +225,7 @@ public:
     }
 };
 
+} // namespace controls::list::widgets
+
 // т.к класс шаблонный прячем реализацию в другой хедер
-#include "ListEditSubItemsImpl.h"
+#include "SubItemsEditorImpl.h"

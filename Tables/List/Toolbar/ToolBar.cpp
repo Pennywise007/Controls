@@ -1,7 +1,7 @@
 ﻿#include <cassert>
 
 #include "ToolBar.h"
-#include "../../DefaultWindowProc.h"
+#include "../../../DefaultWindowProc.h"
 
 namespace controls {
 
@@ -122,9 +122,10 @@ void CToolbar::OnBnClickedAdd()
         m_addCallback(m_list);
         return;
     }
-    for (auto item : ListSelectedItems())
+    const auto selectedLines = ListSelectedItems();
+    for (const auto& item : selectedLines)
         m_list->SetItemState(item, 0, LVIS_SELECTED);
-    ListItemSelect(m_list->InsertItem(m_list->GetItemCount(), L""));
+    ListItemSelect(m_list->InsertItem(selectedLines.empty() ? m_list->GetItemCount() : (selectedLines.back() + 1), L""));
 }
 
 void CToolbar::OnBnClickedDelete()

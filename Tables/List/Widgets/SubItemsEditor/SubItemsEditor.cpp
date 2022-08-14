@@ -1,14 +1,16 @@
 ﻿#include <afxdialogex.h>
 #include <cassert>
 
-#include "ListEditSubItems.h"
+#include "SubItemsEditor.h"
+
+namespace controls::list::widgets {
 
 ////////////////////////////////////////////////////////////////////////////////
 // окно для редактирвоания ячейки списка
-class CEditSubItemWindow : public IEditSubItemWindow
+class CSubItemEditorWindow : public IEditSubItemWindow
 {
 public:
-    CEditSubItemWindow(const CRect& rect, const LVSubItemParams::Ptr& subitemParams);
+    CSubItemEditorWindow(const CRect& rect, const LVSubItemParams::Ptr& subitemParams);
 
 // IEditSubItemWindow
 public:
@@ -43,16 +45,16 @@ private:
 std::unique_ptr<IEditSubItemWindow> IEditSubItemWindow::createWindow(
     const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
 {
-    return std::make_unique<CEditSubItemWindow>(rect, subItemParams);
+    return std::make_unique<CSubItemEditorWindow>(rect, subItemParams);
 }
 
-BEGIN_MESSAGE_MAP(CEditSubItemWindow, CDialogEx)
+BEGIN_MESSAGE_MAP(CSubItemEditorWindow, CDialogEx)
     ON_WM_ACTIVATE()
     ON_WM_DESTROY()
 END_MESSAGE_MAP()
 
 //----------------------------------------------------------------------------//
-CEditSubItemWindow::CEditSubItemWindow(const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
+CSubItemEditorWindow::CSubItemEditorWindow(const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
     : m_subItemParams(subItemParams)
 {
     HINSTANCE instance = AfxGetInstanceHandle();
@@ -79,7 +81,7 @@ CEditSubItemWindow::CEditSubItemWindow(const CRect& rect, const LVSubItemParams:
 }
 
 //----------------------------------------------------------------------------//
-void CEditSubItemWindow::createWindow(const CRect& rect)
+void CSubItemEditorWindow::createWindow(const CRect& rect)
 {
     // создаем окно
     if (CDialogEx::CreateEx(0, CString(typeid(*this).name()), L"",
@@ -100,7 +102,7 @@ void CEditSubItemWindow::createWindow(const CRect& rect)
 
 //----------------------------------------------------------------------------//
 // IEditSubItemWindow
-void CEditSubItemWindow::setInternalControl(std::shared_ptr<CWnd> pControlWnd)
+void CSubItemEditorWindow::setInternalControl(std::shared_ptr<CWnd> pControlWnd)
 {
     m_internalControl = pControlWnd;
 
@@ -109,20 +111,20 @@ void CEditSubItemWindow::setInternalControl(std::shared_ptr<CWnd> pControlWnd)
 
 //----------------------------------------------------------------------------//
 // IEditSubItemWindow
-CWnd* CEditSubItemWindow::getInternalControl()
+CWnd* CSubItemEditorWindow::getInternalControl()
 {
     return m_internalControl.get();
 }
 
 //----------------------------------------------------------------------------//
 // IEditSubItemWindow
-LVSubItemParams* CEditSubItemWindow::getSubItemParams()
+LVSubItemParams* CSubItemEditorWindow::getSubItemParams()
 {
     return m_subItemParams.get();
 }
 
 //----------------------------------------------------------------------------//
-void CEditSubItemWindow::OnOK()
+void CSubItemEditorWindow::OnOK()
 {
     CWnd* ownerWnd = CDialogEx::GetOwner();
     if (ownerWnd && ::IsWindow(ownerWnd->m_hWnd))
@@ -133,7 +135,7 @@ void CEditSubItemWindow::OnOK()
 }
 
 //----------------------------------------------------------------------------//
-void CEditSubItemWindow::OnCancel()
+void CSubItemEditorWindow::OnCancel()
 {
     CWnd* ownerWnd = CDialogEx::GetOwner();
     if (ownerWnd && ::IsWindow(ownerWnd->m_hWnd))
@@ -144,7 +146,7 @@ void CEditSubItemWindow::OnCancel()
 }
 
 //----------------------------------------------------------------------------//
-void CEditSubItemWindow::OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized)
+void CSubItemEditorWindow::OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimized)
 {
     CDialogEx::OnActivate(nState, pWndOther, bMinimized);
 
@@ -154,7 +156,7 @@ void CEditSubItemWindow::OnActivate(UINT nState, CWnd* pWndOther, BOOL bMinimize
 }
 
 //----------------------------------------------------------------------------//
-void CEditSubItemWindow::OnDestroy()
+void CSubItemEditorWindow::OnDestroy()
 {
     CDialogEx::OnDestroy();
 
@@ -193,3 +195,5 @@ void SubItemEditorControllerBase::onEndEditSubItem(CListCtrl* pList, CWnd* edito
 
     pList->SetItemText(pParams->iItem, pParams->iSubItem, currentEditorText);
 }
+
+} // namespace controls::list::widgets
