@@ -8,6 +8,8 @@
 #include <functional>
 #include <map>
 
+#include "Controls/Tables/List/SubItemsInfo.h"
+
 namespace controls::list::widgets {
 
 /*
@@ -19,6 +21,8 @@ template <typename CBaseList = CListCtrl>
 class SubItemsControls : public CBaseList
 {
 public:
+    SubItemsControls();
+
     void SetButton(int index, int iSubItem);
     void SetCheckbox(int index, int iSubItem, bool enabled);
     inline static LONG kStratched = -1;
@@ -42,6 +46,7 @@ protected://********************************************************************
     DECLARE_MESSAGE_MAP()
 
     virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override;
+    virtual BOOL OnChildNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* pResult) override;
 
     // дабл клик с созданием контрола редактирования если необходимо
     afx_msg void OnMouseMove(UINT nFlags, CPoint point);
@@ -59,10 +64,8 @@ private:
 
     struct Control;
 
-    typedef std::map<int, std::shared_ptr<Control>> ControlsByColumns;
-    typedef std::map<int, ControlsByColumns> ColumnsByLines;
+    SubItemsInfo<std::shared_ptr<Control>> m_controls;
 
-    ColumnsByLines m_controls;
     CallbacksHolder m_callbacksHolder;
     // on left button pressed control
     std::shared_ptr<Control> m_buttonDownControl;

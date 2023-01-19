@@ -821,7 +821,7 @@ int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 
     switch (ps->m_sortType)
     {
-    case CListGroupCtrl::SortType::eNone:
+    default:
         return ps->m_control->GetItemData(lParam1) < ps->m_control->GetItemData(lParam2);
     case CListGroupCtrl::SortType::eAscending:
         return ps->m_SortFunction(left, right);
@@ -1233,14 +1233,14 @@ void CListGroupCtrl::PreSubclassWindow()
     extendedListStyle |= LVS_EX_FULLROWSELECT |
         LVS_EX_HEADERDRAGDROP |
         LVS_EX_GRIDLINES |
-        LVS_EX_LABELTIP;
+        LVS_EX_INFOTIP | LVS_EX_LABELTIP;
     SetExtendedStyle(extendedListStyle);
 
     // Enable Vista-look if possible
     EnableWindowTheme(GetSafeHwnd(), L"ListView", L"Explorer", NULL);
     EnableWindowTheme(GetHeaderCtrl()->GetSafeHwnd(), L"ListView", L"Explorer", NULL);
 
-    if (GetExtendedStyle() & LVS_EX_CHECKBOXES)
+    if (extendedListStyle & LVS_EX_CHECKBOXES)
     {
         const HWND header = *GetHeaderCtrl();
         DWORD dwHeaderStyle = ::GetWindowLong(header, GWL_STYLE);

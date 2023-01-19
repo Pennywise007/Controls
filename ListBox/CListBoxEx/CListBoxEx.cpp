@@ -27,12 +27,47 @@ int CListBoxEx::AddItem(const CString& itemText, COLORREF color, int nIndex /*= 
     else
         index = InsertString(nIndex, itemText);
 
-    m_colorsByLines[index] = color;
+    m_lineInfo[index]->lineColor = color;
 
     // иногда при добавлении элементов не возникает перерисовки
     Invalidate();
 
     return index;
+}
+
+int CListBoxEx::AddString(const CString& text)
+{
+    m_lineInfo.emplace_back(std::make_shared<LineInfo>(text));
+    m_internalInsertingText = true;
+    const auto result = CListBox::AddString(L"");
+    m_internalInsertingText = false;
+    Invalidate();
+    return result;
+}
+
+int CListBoxEx::InsertString(int index, const CString& text)
+{
+    if (index < 0 || static_cast<size_t>(index) >= m_lineInfo.size())
+        return AddString(text);
+
+    const auto insertedIt = m_lineInfo.insert(std::next(m_lineInfo.begin(), index),
+                                              std::make_shared<LineInfo>(text));
+    m_internalInsertingText = true;
+    const auto insertIndex = CListBox::InsertString(index, L"");
+    m_internalInsertingText = false;
+    Invalidate();
+    return insertIndex;
+}
+
+void CListBoxEx::GetText(int index, CString& sLabel) const
+{
+    if (index < 0 || static_cast<size_t>(index) >= m_lineInfo.size())
+    {
+        ASSERT(false);
+        return CListBox::GetText(index, sLabel);
+    }
+
+    sLabel = m_lineInfo[index]->text;
 }
 
 void CListBoxEx::PreSubclassWindow()
@@ -53,14 +88,14 @@ void CListBoxEx::MeasureItem(LPMEASUREITEMSTRUCT lpMeasureItemStruct)
     CString sLabel;
     CRect rcLabel;
 
-    CListBox::GetText( nItem, sLabel );
+    GetText( nItem, sLabel );
     CListBox::GetItemRect(nItem, rcLabel);
 
     // рассчитываем высоту элемента
     CPaintDC dc(this);
     dc.SelectObject(CListBox::GetFont());
 
-    lpMeasureItemStruct->itemHeight = dc.DrawText(sLabel, -1, rcLabel, DT_WORDBREAK | DT_CALCRECT);
+    lpMeasureItemStruct->itemHeight = dc.DrawText(sLabel, sLabel.GetLength(), rcLabel, DT_WORDBREAK | DT_CALCRECT);
 }
 
 void CListBoxEx::DrawItem(LPDRAWITEMSTRUCT lpDIS)
@@ -88,14 +123,20 @@ void CListBoxEx::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 
     const COLORREF backColor = [&]()
     {
-        const auto it = m_colorsByLines.find(lpDIS->itemID);
-        if (it == m_colorsByLines.end())
-            return dc.GetBkColor();
-        return it->second;
+        try
+        {
+            return m_lineInfo.at(lpDIS->itemID)->lineColor.value_or(dc.GetBkColor());
+        }
+        catch (...)
+        {
+            ASSERT(false);
+        }
+        return dc.GetBkColor();
     }();
 
     CString sLabel;
     GetText(lpDIS->itemID, sLabel);
+    sLabel.Remove(L'\0');
 
     // item selected
     if ((lpDIS->itemState & ODS_SELECTED) &&
@@ -109,7 +150,7 @@ void CListBoxEx::DrawItem(LPDRAWITEMSTRUCT lpDIS)
         // draw label text
         COLORREF colorTextSave = dc.SetTextColor(highLightTextColor);
         COLORREF colorBkSave = dc.SetBkColor(highLightColor);
-        dc.DrawText( sLabel, -1, &lpDIS->rcItem, m_multilineText ? DT_WORDBREAK : 0);
+        dc.DrawText( sLabel, sLabel.GetLength(), &lpDIS->rcItem, m_multilineText ? DT_WORDBREAK : 0);
 
         dc.SetTextColor(colorTextSave);
         dc.SetBkColor(colorBkSave);
@@ -121,17 +162,16 @@ void CListBoxEx::DrawItem(LPDRAWITEMSTRUCT lpDIS)
         CRect rect = lpDIS->rcItem;
         dc.SetBkColor(backColor);
         dc.FillRect(&rect,&brush);
-        dc.DrawText( sLabel, -1, &lpDIS->rcItem, m_multilineText ? DT_WORDBREAK : 0);
+        dc.DrawText( sLabel, sLabel.GetLength(), &lpDIS->rcItem, m_multilineText ? DT_WORDBREAK : 0);
     }
     // item deselected
-    else if (!(lpDIS->itemState & ODS_SELECTED) &&
-        (lpDIS->itemAction & ODA_SELECT))
+    else if (!(lpDIS->itemState & ODS_SELECTED) && (lpDIS->itemAction & ODA_SELECT))
     {
         CRect rect = lpDIS->rcItem;
         CBrush brush(backColor);
         dc.SetBkColor(backColor);
         dc.FillRect(&rect,&brush);
-        dc.DrawText( sLabel, -1, &lpDIS->rcItem, m_multilineText ? DT_WORDBREAK : 0);
+        dc.DrawText( sLabel, sLabel.GetLength(), &lpDIS->rcItem, m_multilineText ? DT_WORDBREAK : 0);
     }
 }
 
@@ -169,7 +209,13 @@ BOOL CListBoxEx::OnEraseBkgnd(CDC* pDC)
 LRESULT CListBoxEx::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (message == LB_RESETCONTENT)
-        m_colorsByLines.clear();
+        m_lineInfo.clear();
+    else if (message == LB_DELETESTRING)
+        m_lineInfo.erase(std::next(m_lineInfo.begin(), static_cast<size_t>(wParam)));
+    else if (message == LB_ADDSTRING && !m_internalInsertingText)
+        return AddString(LPCTSTR(lParam));
+    else if (message == LB_INSERTSTRING && !m_internalInsertingText)
+        return InsertString(int(wParam), LPCTSTR(lParam));
 
     return CListBox::WindowProc(message, wParam, lParam);
 }

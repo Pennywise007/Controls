@@ -6,6 +6,7 @@
 #include <afx.h>
 #include <libloaderapi.h>
 #include <shlwapi.h>
+#include <Uxtheme.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 /* Установить тему для окна / контрола
@@ -94,3 +95,25 @@ inline bool IsThemeEnabled()
     }
     return XPStyle;
 }
+
+// see https://docs.microsoft.com/ru-ru/windows/win32/controls/parts-and-states?redirectedfrom=MSDN
+struct ThemeHolder
+{
+    explicit ThemeHolder(HWND hWnd, const wchar_t* themeName)
+        : m_hTheme(::OpenThemeData(hWnd, themeName))
+    {
+        VERIFY(!!m_hTheme);
+    }
+
+    ~ThemeHolder()
+    {
+        VERIFY(SUCCEEDED(::CloseThemeData(m_hTheme)));
+    }
+
+    operator HTHEME() const
+    {
+        return m_hTheme;
+    }
+
+    HTHEME m_hTheme;
+};
