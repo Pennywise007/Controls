@@ -16,6 +16,7 @@ BEGIN_MESSAGE_MAP(CSpinEdit, CEditBase)
     ON_WM_CREATE()
     ON_WM_SHOWWINDOW()
     ON_WM_WINDOWPOSCHANGING()
+    ON_WM_ENABLE()
 END_MESSAGE_MAP()
 
 CSpinEdit::CSpinEdit(_In_opt_ UINT controlID /* = kUndefinedControlId*/)
@@ -189,4 +190,11 @@ void CSpinEdit::UsePositiveDigitsOnly(_In_opt_ bool bUsePositiveDigitsOnly /*= t
         m_spinCtrl->SetRange(m_spinRange.first, m_spinRange.second);
 
     CEditBase::UsePositiveDigitsOnly(bUsePositiveDigitsOnly);
+}
+
+void CSpinEdit::OnEnable(BOOL bEnable)
+{
+    CEditBase::OnEnable(bEnable);
+
+    m_spinCtrl->EnableWindow(bEnable);
 }
