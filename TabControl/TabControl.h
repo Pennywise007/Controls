@@ -1,33 +1,34 @@
 ﻿#pragma once
 
 #include <afxcmn.h>
-#include <map>
+#include <list>
 #include <memory>
 
 ////////////////////////////////////////////////////////////////////////////////
-// Расширение для контрола с табами позволяет вставлять диалоги во вкладки
-// и переключаться между ними / раставлять их на места и сайзировать вместе с контролом
-class CTabControl : public CTabCtrl
+// Extension for control with tabs allows you to insert dialogs into tabs
+// and switch between them / place them in place and size them together with the control
+class CTabControl : protected CTabCtrl
 {
 public:
     CTabControl() = default;
 
-public:
-    /// Вставка таба с окном привязанным к нему, при переключении вкладок
-    /// будет включаться окно привязанное к вкладке.
-    ///
-    /// Внимание! Вставлять необходимо по очереди (по возрастанию индексов)
-    /// Вставка между существующими табами может привести к проблемам(не реализована)
-    LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
-                   _In_ std::shared_ptr<CWnd> tabWindow);
+    operator CWnd&() { return *this; }
+    CWnd& operator()() { return *this; }
 
-    /// Вставка диалога в таб, если у диалога нет окна - будет вызван
-    /// CDialog::Create с заданным идентификатором nIDTemplate и родителем будет проставлен таб контрол
-    ///
-    /// Внимание! Вставлять необходимо по очереди (по возрастанию индексов)
-    /// Вставка между существующими табами может привести к проблемам(не реализована)
-    LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
-                   _In_ std::shared_ptr<CDialog> tabDialog, UINT nIDTemplate);
+public:
+    LONG AddTab(_In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CWnd>& tabWindow);
+    LONG AddTab(_In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CDialog>& tabDialog, UINT nIDTemplate);
+
+    LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CWnd>& tabWindow);
+    LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CDialog>& tabDialog, UINT nIDTemplate);
+
+    int GetCurSel() const;
+    int SetCurSel(_In_ int nItem);
+
+    int GetItemCount() const;
+    
+    BOOL DeleteTab(_In_ int nItem);
+    BOOL DeleteAllItems();
 
     /// <summary>
     /// Get window from tab control by index
@@ -44,10 +45,11 @@ public:
     afx_msg void OnTcnSelchange(NMHDR *pNMHDR, LRESULT *pResult);
 
 private:
-    // располагает текущее активное окно в клиентской области таба
+    // positions the currently active window in the client tab area
     void layoutCurrentWindow();
 
+    void onSelChanged();
+
 private:
-    // диалоги для каждой вкладки
-    std::map<LONG, std::shared_ptr<CWnd>> m_tabWindows;
+    std::list<std::shared_ptr<CWnd>> m_tabWindows;
 };

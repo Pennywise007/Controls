@@ -8,18 +8,23 @@ BEGIN_MESSAGE_MAP(CTabControl, CTabCtrl)
     ON_NOTIFY_REFLECT(TCN_SELCHANGE, &CTabControl::OnTcnSelchange)
 END_MESSAGE_MAP()
 
-LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
-                            _In_ std::shared_ptr<CWnd> tabWindow)
+LONG CTabControl::AddTab(_In_z_ LPCTSTR lpszItem, _In_ const  std::shared_ptr<CWnd>& tabWindow)
 {
-    // вставляем элемент
+    return CTabControl::InsertTab(GetItemCount(), lpszItem, tabWindow);
+}
+
+LONG CTabControl::AddTab(_In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CDialog>& tabDialog, UINT nIDTemplate)
+{
+    return CTabControl::InsertTab(GetItemCount(), lpszItem, tabDialog, nIDTemplate);
+}
+
+LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CWnd>& tabWindow)
+{
     LONG insertedIndex = CTabCtrl::InsertItem(nItem, lpszItem);
 
-    if (m_tabWindows.find(insertedIndex) != m_tabWindows.end())
-        assert(!"Уже существует окно на этой вкладке, возможно их надо удалить!");
+    m_tabWindows.insert(std::next(m_tabWindows.begin(), insertedIndex), tabWindow);
 
-    m_tabWindows[insertedIndex] = tabWindow;
-
-    // Если вставленная вкладка стала текущей
+    // If inserted tab becomes current
     if (CTabCtrl::GetCurSel() == insertedIndex)
     {
         tabWindow->ShowWindow(SW_SHOW);
@@ -31,37 +36,19 @@ LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
     return insertedIndex;
 }
 
-LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem,
-                            _In_ std::shared_ptr<CDialog> tabDialog, UINT nIDTemplate)
+LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CDialog>& tabDialog, UINT nIDTemplate)
 {
-    // вставляем элемент
-    LONG insertedIndex = CTabCtrl::InsertItem(nItem, lpszItem);
-
-    if (m_tabWindows.find(insertedIndex) != m_tabWindows.end())
-        assert(!"Уже существует окно на этой вкладке, возможно их надо удалить!");
-
-    // если у диалога нет окна создаем его как наш дочерний диалог
+    // create dialog if not created
     if (!::IsWindow(tabDialog->m_hWnd))
         tabDialog->Create(nIDTemplate, this);
 
-    m_tabWindows[insertedIndex] = tabDialog;
-
-    // Если вставленная вкладка стала текущей
-    if (CTabCtrl::GetCurSel() == insertedIndex)
-    {
-        tabDialog->ShowWindow(SW_SHOW);
-        tabDialog->SetFocus();
-
-        layoutCurrentWindow();
-    }
-
-    return insertedIndex;
+    return InsertTab(nItem, lpszItem, tabDialog);
 }
 
 std::shared_ptr<CWnd> CTabControl::GetTabWindow(LONG index)
 {
-    ASSERT(m_tabWindows.find(index) != m_tabWindows.end());
-    return m_tabWindows[index];
+    ASSERT(index < (int)m_tabWindows.size());
+    return *std::next(m_tabWindows.begin(), index);
 }
 
 BOOL CTabControl::OnEraseBkgnd(CDC* /*pDC*/)
@@ -76,35 +63,77 @@ void CTabControl::OnSize(UINT nType, int cx, int cy)
     layoutCurrentWindow();
 }
 
+int CTabControl::GetCurSel() const
+{
+   return CTabCtrl::GetCurSel();
+}
+
+int CTabControl::SetCurSel(_In_ int nItem)
+{
+    const auto res = CTabCtrl::SetCurSel(nItem);
+    onSelChanged();
+    return res;
+}
+
+int CTabControl::GetItemCount() const
+{
+   return CTabCtrl::GetItemCount();
+}
+
+BOOL CTabControl::DeleteTab(_In_ int nItem)
+{
+    const auto res = CTabCtrl::DeleteItem(nItem);
+    if (res == TRUE)
+    {
+        ASSERT(nItem < m_tabWindows.size());
+        m_tabWindows.erase(std::next(m_tabWindows.begin(), nItem));
+    }
+
+    return res;
+}
+
+BOOL CTabControl::DeleteAllItems()
+{
+    const auto res = CTabCtrl::DeleteAllItems();
+    if (res == TRUE)
+        m_tabWindows.clear();
+
+    return res;
+}
+
 void CTabControl::OnTcnSelchange(NMHDR* /*pNMHDR*/, LRESULT* pResult)
 {
-    int curSel = CTabCtrl::GetCurSel();
-    assert(curSel != -1);
+    onSelChanged();
+    *pResult = 0;
+}
+
+void CTabControl::onSelChanged()
+{
+    const int curSel = CTabCtrl::GetCurSel();
 
     // Переключаем активную вкладку
+    int curIndex = 0;
     for (auto& windowTab : m_tabWindows)
     {
-        if (windowTab.first == curSel)
+        if (curIndex == curSel)
         {
-            windowTab.second->ShowWindow(SW_SHOW);
-            windowTab.second->SetFocus();
+            windowTab->ShowWindow(SW_SHOW);
+            windowTab->SetFocus();
 
             layoutCurrentWindow();
         }
         else
-            windowTab.second->ShowWindow(SW_HIDE);
+            windowTab->ShowWindow(SW_HIDE);
+        ++curIndex;
     }
-
-    *pResult = 0;
 }
 
 void CTabControl::layoutCurrentWindow()
 {
     int curSel = CTabCtrl::GetCurSel();
 
-    auto currentWindow = m_tabWindows.find(curSel);
-    if (currentWindow == m_tabWindows.end())
-        return;
+    ASSERT(curSel < (int)m_tabWindows.size());
+    auto window = *std::next(m_tabWindows.begin(), curSel);
 
     // рассчитываем позицию где должен быть диалог
     CRect lpRect;
@@ -116,5 +145,5 @@ void CTabControl::layoutCurrentWindow()
 
     clRc.InflateRect(-2, -2);
 
-    currentWindow->second->MoveWindow(&clRc, TRUE);
+    window->MoveWindow(&clRc, TRUE);
 }
