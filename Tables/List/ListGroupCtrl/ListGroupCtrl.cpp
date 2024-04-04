@@ -1576,10 +1576,23 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
                 controlWidth -= GetColumnWidth(column);
         }
 
-        for (auto&& [columnIndex, proportion] : m_columnsProportions)
+        if (controlWidth < 0)
+            controlWidth = 0;
+
+        // Sometimes scroll lagging and we can't predict it
+        do
         {
-            SetColumnWidth(columnIndex, static_cast<int>((double)controlWidth / proportion));
-        }
+            for (auto&& [columnIndex, proportion] : m_columnsProportions)
+            {
+                SetColumnWidth(columnIndex, static_cast<int>((double)controlWidth / proportion));
+            }
+        } while ((GetWindowLong(m_hWnd, GWL_STYLE) & WS_HSCROLL) && --controlWidth > 0);
+
+        // Forcing redraw to fix problem:
+        // Control full with data and has a vertical scroll. After increasing control size at
+        // the moment when scroll dissapears control becomes empty
+        RedrawWindow();
+        RedrawItems(0, GetItemCount());
     }
 }
 
