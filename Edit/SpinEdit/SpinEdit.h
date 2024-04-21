@@ -12,7 +12,6 @@
 
 #include "afxwin.h"
 #include "afxcmn.h"
-#include <memory>
 #include <utility>
 
 #include <Controls/SpinButton/SpinButton.h>
@@ -34,7 +33,6 @@ public:
 	// Undefined spin control id, if not specified - spin conrtrol using Id of the edit
 	inline static constexpr UINT kUndefinedControlId = -1;
 	CSpinEdit(_In_opt_ UINT controlID = kUndefinedControlId);
-	~CSpinEdit();
 public:
 	// Managing range of values
 	void SetRange(_In_ double Left, _In_ double Right);
@@ -47,7 +45,7 @@ public:
 	void SetMinMaxLimits(_In_ double MinVal, _In_ double MaxVal) override { SetRange(MinVal, MaxVal); };
 
 	// Getting spin control for managing
-	CSpinButton* GetSpinCtrl() const { return m_spinCtrl.get(); }
+	CSpinButton* GetSpinCtrl() { return &m_spinCtrl; }
 
 	// Setting spin control align side
 	void SetSpinAlign(_In_opt_ spin_edit::SpinAlign Align = spin_edit::SpinAlign::RIGHT);
@@ -59,7 +57,7 @@ private:
 	void InitEdit();	// иницилизация контрола
 	void ReposCtrl(_In_opt_ const CRect& EditRect);	// перемасштабирование контрола
 private:
-	std::unique_ptr<CSpinButton> m_spinCtrl;		// экземпляр спин контрола
+	CSpinButton m_spinCtrl;							// экземпляр спин контрола
 	spin_edit::SpinAlign m_spinAlign;	            // привязка спина
 	std::pair<double, double> m_spinRange;	        // границы контрола
 	int m_spinWidth;					            // ширина контрола
@@ -71,6 +69,7 @@ public:
 	virtual void PreSubclassWindow();
 	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+	afx_msg void OnDestroy();
 	afx_msg void OnWindowPosChanged(WINDOWPOS* lpwndpos);
 	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
     afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);

@@ -14,6 +14,7 @@ constexpr auto kDefaultSpinWidth = 19;
 BEGIN_MESSAGE_MAP(CSpinEdit, CEditBase)
     ON_WM_WINDOWPOSCHANGED()
     ON_WM_CREATE()
+    ON_WM_DESTROY()
     ON_WM_SHOWWINDOW()
     ON_WM_WINDOWPOSCHANGING()
     ON_WM_ENABLE()
@@ -25,30 +26,21 @@ CSpinEdit::CSpinEdit(_In_opt_ UINT controlID /* = kUndefinedControlId*/)
     , m_spinWidth	(kDefaultSpinWidth)
     , m_bFromCreate	(false)
     , m_spinCtrlID	(controlID)
-    , m_spinCtrl    (std::make_unique<CSpinButton>())
     , m_spinRange   (std::make_pair(-DBL_MAX, DBL_MAX))
 {}
 
-CSpinEdit::~CSpinEdit()
-{
-    if (IsWindow(*m_spinCtrl))
-    {
-        m_spinCtrl->DestroyWindow();
-    }
-}
-
 void CSpinEdit::InitEdit()
 {
-    if (IsWindow(*m_spinCtrl))
-        m_spinCtrl->DestroyWindow();
+    if (IsWindow(m_spinCtrl))
+        m_spinCtrl.DestroyWindow();
 
     DWORD Style = CEditBase::GetStyle() & WS_VISIBLE ? WS_VISIBLE : 0;
     Style |= WS_CHILD | UDS_SETBUDDYINT | UDS_HOTTRACK | UDS_NOTHOUSANDS;
     // создаем спинконтрол
-    m_spinCtrl->Create(Style, CRect(), CEditBase::GetParent(),
+    m_spinCtrl.Create(Style, CRect(), CEditBase::GetParent(),
                        m_spinCtrlID == kUndefinedControlId ? CEditBase::GetDlgCtrlID() : m_spinCtrlID);
-    m_spinCtrl->SetBuddy(this);
-    m_spinCtrl->SetRange(m_spinRange.first, m_spinRange.second);
+    m_spinCtrl.SetBuddy(this);
+    m_spinCtrl.SetRange(m_spinRange.first, m_spinRange.second);
 
     // сдвигаем основное окно чтобы размер окна со спином остался прежним
     CRect Rect;
@@ -86,8 +78,8 @@ void CSpinEdit::SetSpinAlign(_In_opt_  spin_edit::SpinAlign Align /*=  spin_edit
 
 void CSpinEdit::SetRange(_In_ double Left, _In_ double Right)
 {
-    if (IsWindow(*m_spinCtrl))
-        m_spinCtrl->SetRange(CEditBase::m_bUsePositivesDigitsOnly ? max(0, Left) : Left, Right);
+    if (IsWindow(m_spinCtrl))
+        m_spinCtrl.SetRange(CEditBase::m_bUsePositivesDigitsOnly ? max(0, Left) : Left, Right);
     m_spinRange = std::make_pair(Left, Right);
 
     CEditBase::SetUseCtrlLimits(true);
@@ -142,8 +134,8 @@ void CSpinEdit::ReposCtrl(_In_opt_ const CRect& EditRect)
         SpinRect.left = SpinRect.right;
         SpinRect.right += m_spinWidth;
     }
-    m_spinCtrl->MoveWindow(SpinRect);
-    m_spinCtrl->RedrawWindow();
+    m_spinCtrl.MoveWindow(SpinRect);
+    m_spinCtrl.RedrawWindow();
 }
 
 BOOL CSpinEdit::PreCreateWindow(CREATESTRUCT& cs)
@@ -161,10 +153,18 @@ int CSpinEdit::OnCreate(LPCREATESTRUCT lpCreateStruct)
     return 0;
 }
 
+void CSpinEdit::OnDestroy()
+{
+    if (IsWindow(m_spinCtrl))
+        m_spinCtrl.DestroyWindow();
+
+    CEditBase::OnDestroy();
+}
+
 void CSpinEdit::OnShowWindow(BOOL bShow, UINT nStatus)
 {
     CEditBase::OnShowWindow(bShow, nStatus);
-    m_spinCtrl->ShowWindow(bShow);
+    m_spinCtrl.ShowWindow(bShow);
 }
 
 void CSpinEdit::GetWindowRect(LPRECT lpRect) const
@@ -185,9 +185,9 @@ void CSpinEdit::GetClientRect(LPRECT lpRect) const
 void CSpinEdit::UsePositiveDigitsOnly(_In_opt_ bool bUsePositiveDigitsOnly /*= true*/)
 {
     if (bUsePositiveDigitsOnly)
-        m_spinCtrl->SetRange(std::max<double>(0., m_spinRange.first), m_spinRange.second);
+        m_spinCtrl.SetRange(std::max<double>(0., m_spinRange.first), m_spinRange.second);
     else
-        m_spinCtrl->SetRange(m_spinRange.first, m_spinRange.second);
+        m_spinCtrl.SetRange(m_spinRange.first, m_spinRange.second);
 
     CEditBase::UsePositiveDigitsOnly(bUsePositiveDigitsOnly);
 }
@@ -196,5 +196,5 @@ void CSpinEdit::OnEnable(BOOL bEnable)
 {
     CEditBase::OnEnable(bEnable);
 
-    m_spinCtrl->EnableWindow(bEnable);
+    m_spinCtrl.EnableWindow(bEnable);
 }
