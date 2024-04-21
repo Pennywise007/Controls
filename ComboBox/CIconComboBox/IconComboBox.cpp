@@ -1,90 +1,140 @@
-#include "stdafx.h"
 #include "IconComboBox.h"
-
-CIconComboBox::CIconComboBox()
-{
-}
 
 CIconComboBox::~CIconComboBox()
 {
-	m_ImageList.DeleteImageList();
+	ReleaseResources();
+}
+
+void CIconComboBox::RecreateCtrl(_In_opt_ int dropdownMaxHeight /*= 100*/)
+{
+	CRect rect;
+	CComboBoxEx::GetWindowRect(rect);
+	CComboBoxEx::GetParent()->ScreenToClient(rect);
+	rect.bottom += dropdownMaxHeight;
+
+	UINT id = CComboBoxEx::GetDlgCtrlID();
+	UINT style = CComboBoxEx::GetStyle();
+	UINT styleEx = CComboBoxEx::GetExStyle();
+	CWnd* pParrent = CComboBoxEx::GetParent();
+
+	DestroyWindow();
+	CreateEx(styleEx, style, rect, pParrent, id);
 }
 
 BOOL CIconComboBox::Create(DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID)
 {
-	dwStyle &= ~CBS_OWNERDRAWVARIABLE;
+	m_bNeedRecreate = false;
+
+	// Ideal style for combobox is
+	// WS_VISIBLE | WS_CHILDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_NOINTEGRALHEIGHT
+	dwStyle &= ~(CBS_OWNERDRAWVARIABLE | CBS_HASSTRINGS);
 	dwStyle |= CBS_OWNERDRAWFIXED;
 
 	return CComboBoxEx::Create(dwStyle, rect, pParentWnd, nID);
 }
 
-BOOL CIconComboBox::CreateEx(DWORD dwExStyle, DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID)
+void CIconComboBox::ReleaseResources()
 {
-	dwStyle &= ~CBS_OWNERDRAWVARIABLE;
-	dwStyle |= CBS_OWNERDRAWFIXED;
+	m_imageList.DeleteImageList();
 
-	return CComboBoxEx::CreateEx(dwExStyle, dwStyle, rect, pParentWnd, nID);
+	for (auto icon : m_tempIcons)
+        ::DestroyIcon(icon);
+	m_tempIcons.clear();
 }
 
-void CIconComboBox::SetIconList(_In_ std::list<HICON> &IconList, _In_opt_ CSize IconSizes /*= CSize(15, 15)*/)
+void CIconComboBox::SetIconList(_In_ std::list<HICON> iconList, _In_opt_ CSize iconSizes /*= CSize(15, 15)*/)
 {
-	m_ImageList.DeleteImageList();
-	m_ImageList.Create(IconSizes.cx, IconSizes.cy, ILC_COLOR32, 1, 1);
+	if (m_bNeedRecreate)
+	{
+		RecreateCtrl();
+	}
 
-	for (auto &it : IconList)
-		m_ImageList.Add(it);
+	ReleaseResources();
+	m_imageList.Create(iconSizes.cx, iconSizes.cy, ILC_COLOR32, 0, iconList.size());
 
-	CComboBoxEx::SetImageList(&m_ImageList);
+	for (auto& it : iconList)
+		m_imageList.Add(it);
+
+	IMAGEINFO info = { 0 };
+	m_imageList.GetImageInfo(0, &info);
+
+	CComboBoxEx::SetImageList(&m_imageList);
 }
 
-int CIconComboBox::InsertItem(_In_ int iItemIndex, 
-							  _In_ LPTSTR pszText, 
-							  _In_ int iImageIndex, 
-							  _In_opt_ int iSelectedImage /*= USE_IMAGE_INDEX*/, 
+void CIconComboBox::SetBitmapsList(_In_ std::list<CBitmap*> bitmaps, _In_opt_ CSize bitmapSizes /*= CSize(15, 15)*/)
+{
+	if (m_bNeedRecreate)
+		RecreateCtrl();
+
+	ReleaseResources();
+	// we use ILC_COLOR32 because we will draw icons, otherwise use ILC_COLOR24 | ILC_MASK 
+	m_imageList.Create(bitmapSizes.cx, bitmapSizes.cy, ILC_COLOR32, 0, bitmaps.size());
+	
+	for (auto it : bitmaps)
+	{
+		// Convert bitmap to icon because bitmap got problems with transparency
+		BITMAP bmp;
+		it->GetBitmap(&bmp);
+
+		HBITMAP hbmMask = ::CreateCompatibleBitmap(::GetDC(NULL), bmp.bmWidth, bmp.bmHeight);
+
+		ICONINFO ii = { 0 };
+		ii.fIcon = TRUE;
+		ii.hbmColor = *it;
+		ii.hbmMask = hbmMask;
+
+		m_imageList.Add(m_tempIcons.emplace_back(::CreateIconIndirect(&ii)));
+
+		::DeleteObject(hbmMask);
+	}
+
+	CComboBoxEx::SetImageList(&m_imageList);
+}
+
+int CIconComboBox::InsertItem(_In_ int iItemIndex,
+							  _In_ LPCTSTR pszText,
+							  _In_ int iImageIndex,
+							  _In_opt_ int iSelectedImage /*= kUseImageIndex*/,
 							  _In_opt_ int iIndent		  /*= 0*/)
 {
 	COMBOBOXEXITEM cbei;
-	
-	cbei.iItem		= iItemIndex;
-	cbei.pszText	= pszText;
+
+	cbei.iItem = iItemIndex;
+	cbei.pszText = (LPTSTR)pszText;
 	cbei.cchTextMax = wcslen(pszText) * sizeof(WCHAR);
-	cbei.iImage		= iImageIndex;
-	cbei.iSelectedImage = iSelectedImage != USE_IMAGE_INDEX ? iSelectedImage : iImageIndex;
-	cbei.iIndent	= iIndent;
+	cbei.iImage = iImageIndex;
+	cbei.iSelectedImage = iSelectedImage != kUseImageIndex ? iSelectedImage : iImageIndex;
+	cbei.iIndent = iIndent;
 
 	// Set the mask common to all items.
-	cbei.mask		= CBEIF_TEXT | CBEIF_INDENT | CBEIF_IMAGE | CBEIF_SELECTEDIMAGE;
-	
-	return CComboBoxEx::InsertItem(&cbei);
+	cbei.mask = CBEIF_TEXT | CBEIF_INDENT | CBEIF_IMAGE | CBEIF_SELECTEDIMAGE;
+
+	return InsertItem(&cbei);
 }
 
-int CIconComboBox::InsertItem(_In_ COMBOBOXEXITEM *citem)
+int CIconComboBox::InsertItem(_In_ COMBOBOXEXITEM* citem)
 {
-	return CComboBoxEx::InsertItem(citem);
+	if (m_bNeedRecreate)
+        RecreateCtrl();
+
+	auto item = CComboBoxEx::InsertItem(citem);
+	ASSERT(item != -1);
+
+	return item;
 }
 
-void CIconComboBox::RecreateCtrl(_In_opt_ int NewHeight /*= -1*/)
+void CIconComboBox::GetWindowText(CString& text)
 {
-	CRect Rect;
-	CComboBoxEx::GetWindowRect(Rect);
-	CComboBoxEx::GetParent()->ScreenToClient(Rect);
+	auto iItem = GetCurSel();
+	if (iItem == -1)
+		return CComboBoxEx::GetWindowText(text);
 
-	UINT ID			= CComboBoxEx::GetDlgCtrlID();
-	UINT Style		= CComboBoxEx::GetStyle();
-	Style &= ~CBS_OWNERDRAWVARIABLE;
-	Style |= CBS_OWNERDRAWFIXED;
-	UINT StyleEx	= CComboBoxEx::GetExStyle();
-	CWnd *pParrent	= CComboBoxEx::GetParent();
+	COMBOBOXEXITEM item = { 0 };
+	item.iItem = iItem;
+	item.pszText = text.GetBufferSetLength(MAX_PATH);
+	item.cchTextMax = MAX_PATH;
+	item.mask = CBEIF_TEXT;
+	GetItem(&item);
 
-	CComboBoxEx::DestroyWindow();
-
-	INITCOMMONCONTROLSEX stuctMy;
-	stuctMy.dwSize = sizeof(INITCOMMONCONTROLSEX);
-	stuctMy.dwICC = ICC_USEREX_CLASSES;
-	InitCommonControlsEx(&stuctMy);
-
-	m_hWnd = CreateWindowExW(StyleEx, WC_COMBOBOXEX, WC_COMBOBOXEX, Style,
-							 Rect.left, Rect.top, 
-							 Rect.Width(), (NewHeight == -1 ? Rect.Height() : NewHeight), 
-							 pParrent->m_hWnd, (HMENU)ID, 0, 0);
+	text.ReleaseBuffer();
 }

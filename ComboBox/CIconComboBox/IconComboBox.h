@@ -2,63 +2,56 @@
 #include "afxcmn.h"
 #include <list>
 //*************************************************************************************************
-/*	Описание: комбинированный список с иконками, контрол необходимо создавать динамически, 
-	высота выпадающего списка зависит от заданной высоты контрола 
-	
-!!!	ИЛИ ЖЕ СОЗДАТЬ НА ФОРМЕ ПРОСТОЙ COMBOBOX НАСТРОИТЬ ЕГО И В INITDIALOG ВЫЗВАТЬ RecreateCtrl()!!!	*/
+/*	Combo list with icons
+* 
 //*************************************************************************************************
-//	Возможные интересные флаги : WS_VISIBLE, WS_CHILD, CBS_DROPDOWNLIST или CBS_DROPDOWN или CBS_SIMPLE
+!!! Control window needs to be recreated and RecreateCtrl() automatically if it was not created dynamically !!!
+
+	Ideal style for combobox is:
+	WS_VISIBLE | WS_CHILDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED
+	CBS_OWNERDRAWFIXED will be added and CBS_OWNERDRAWVARIABLE | CBS_HASSTRINGS will be removed for displaying icons
 //*************************************************************************************************
-/*	Пример работы с контролом
+Example:
+	std::list<HICON> icons = { AfxGetApp()->LoadStandardIcon(IDI_QUESTION) };
+!!! Don't forget to call ::DestroyIcon on any created icons
 
-	// экземпляр контрола
-	CIconComboBox m_ImageCombo;
+	iconCombobox.RecreateCtrl(100);
 
-	// список иконок привязанных к контролу
-	std::list<HICON> m_IconList;
-	m_IconList.push_back(NewIcon1);
-	m_IconList.push_back(NewIcon2);
+	iconCombobox.SetIconList(icons);
+	iconCombobox.InsertItem(0, L"Item1", 0);
+	iconCombobox.SetCurSel(0);
 
-	// создание контрола
-	m_ImageCombo.Create(WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST, CRect(0, 50, 300, 250), this, 123);
-	
-	// задание списка отображаемых иконок
-	m_ImageCombo.SetIconList(m_IconList);
-
-	// заполнение элементов
-	m_ImageCombo.InsertItem(0, L"Элемент 1", 0, 0, 0);
-	m_ImageCombo.InsertItem(1, L"Элемент 2", 1, 1, 1);*/
-//*************************************************************************************************
-#define USE_IMAGE_INDEX -1		// использование по умолчанию iIconIndex
+*/
 //*************************************************************************************************
 class CIconComboBox : public CComboBoxEx
 {
+	static constexpr int kUseImageIndex = -1;
 public://******************************************************************************************
-	CIconComboBox();
+	CIconComboBox() = default;
 	~CIconComboBox();
 public://******************************************************************************************
-	// задания перечня иконок, с заданием размеров отображаемых иконок
-	virtual void SetIconList(_In_ std::list<HICON> &IconList, _In_opt_ CSize IconSizes = CSize(15, 15));
+	// Control window rectreation, will be called automatically if control was not created dynamically
+	virtual void RecreateCtrl(_In_opt_ int dropdownMaxHeight = 100);
 	//*********************************************************************************************
-	// добавление строки в контрол
-	// @param iItemIndex		- индекс добавляемого элемента
-	// @param pszText			- добавляемый текст
-	// @param iIconIndex		- индекс отображаемой иконки
-	// @param iSelectedImage	- индекс иконки при выборе этой строчки(по умолчанию iIconIndex)
-	// @param iIndent			- отступ слева (по умолчанию 0)
+	// Setting images list
+	virtual void SetIconList(_In_ std::list<HICON> iconList, _In_opt_ CSize iconSizes = CSize(15, 15));
+	virtual void SetBitmapsList(_In_ std::list<CBitmap*> bitmaps, _In_opt_ CSize bitmapSizes = CSize(15, 15));
+	//*********************************************************************************************
+	// Adding line in control
 	virtual int InsertItem(_In_ int iItemIndex, 
-						   _In_ LPTSTR pszText, 
+						   _In_ LPCTSTR pszText,
 						   _In_ int iImageIndex,
-						   _In_opt_ int iSelectedImage	= USE_IMAGE_INDEX,
-						   _In_opt_ int iIndent			= 0);
-	// добавление строки в контрол
+						   _In_opt_ int iSelectedImageIndex	= kUseImageIndex,
+						   _In_opt_ int iIndent	= 0);
 	virtual int InsertItem(_In_ COMBOBOXEXITEM *citem);
-	//*********************************************************************************************
-	// пересоздание контрола, NewHeight - новая высота контрола, если не задано то не изменяется
-	virtual void RecreateCtrl(_In_opt_ int NewHeight = -1);
+	// Get current window text
+	virtual void GetWindowText(CString& text);
 public://******************************************************************************************
-	virtual BOOL Create(DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID);
-	virtual BOOL CreateEx(DWORD dwExStyle, DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID);
+	virtual BOOL Create(DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID) override;
+protected://*****************************************************************************************
+	void ReleaseResources();
 protected://***************************************************************************************
-	CImageList m_ImageList;	// список отображаемых иконок
+	CImageList m_imageList;
+	std::list<HICON> m_tempIcons;
+	bool m_bNeedRecreate = true;
 };	//*********************************************************************************************
