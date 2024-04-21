@@ -10,7 +10,9 @@ BEGIN_MESSAGE_MAP(CToolWindow, CWnd)
     ON_WM_CREATE()
 END_MESSAGE_MAP()
 
-#define CLASS_NAME L"CToolWindow"
+namespace {
+constexpr auto kClassName = L"CToolWindow";
+} // namespace
 
 CToolWindow::CToolWindow(CMFCToolTipInfo* pParams/* = NULL*/)
     : m_drawProxy(pParams)
@@ -18,7 +20,7 @@ CToolWindow::CToolWindow(CMFCToolTipInfo* pParams/* = NULL*/)
     WNDCLASS wndcls;
     HINSTANCE hInst = AfxGetInstanceHandle();
 
-    if (!(::GetClassInfo(hInst, CLASS_NAME, &wndcls)))
+    if (!(::GetClassInfo(hInst, kClassName, &wndcls)))
     {
         // otherwise we need to register a new class
         wndcls.style = CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW;
@@ -29,7 +31,7 @@ CToolWindow::CToolWindow(CMFCToolTipInfo* pParams/* = NULL*/)
         wndcls.hCursor = AfxGetApp()->LoadStandardCursor(IDC_ARROW);
         wndcls.hbrBackground = NULL; // No Background brush (gives flicker)
         wndcls.lpszMenuName = NULL;
-        wndcls.lpszClassName = CLASS_NAME;
+        wndcls.lpszClassName = kClassName;
 
         if (!AfxRegisterClass(&wndcls))
         {
@@ -52,7 +54,7 @@ BOOL CToolWindow::Create(HWND parent, bool topMost)
 {
     ASSERT(!::IsWindow(m_hWnd));
 
-    const auto res = CWnd::CreateEx(topMost ? WS_EX_TOPMOST : 0, CLASS_NAME, CLASS_NAME,
+    const auto res = CWnd::CreateEx(topMost ? WS_EX_TOPMOST : 0, kClassName, kClassName,
                           WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
                           CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                           parent, NULL);
@@ -283,5 +285,3 @@ int CToolWindow::OnCreate(LPCREATESTRUCT lpCreateStruct)
     ModifyStyle(WS_BORDER, 0);
     return 0;
 }
-
-#undef CLASS_NAME
