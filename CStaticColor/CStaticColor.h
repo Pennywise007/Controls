@@ -15,8 +15,6 @@ private:
 	// Кисти для рисования фона
 	HBRUSH m_brushBk;
 
-	CString m_text;
-		
 protected:
 	DECLARE_MESSAGE_MAP()
 	afx_msg HBRUSH CtlColor(CDC* pDC, UINT nCtlColor);

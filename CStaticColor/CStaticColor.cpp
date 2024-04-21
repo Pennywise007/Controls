@@ -2,7 +2,6 @@
 /*		Идея о ON_WM_CTLCOLOR_REFLECT взята на сайте вопросов stackoverflow.com.
 */
 //-----------------------------------------------------------------------------
-#include "stdafx.h"
 #include "CStaticColor.h"
 //-----------------------------------------------------------------------------
 BEGIN_MESSAGE_MAP(CStaticColor, CStatic)
@@ -97,10 +96,11 @@ void CStaticColor::SetTextColor(const COLORREF color)
 //-----------------------------------------------------------------------------
 HBRUSH CStaticColor::CtlColor(CDC* pDC, UINT nCtlColor)
 {
-	if (m_bTransparent)
+	if (m_bTransparent || true)
 		return NULL;
 	
-	GetWindowText(m_text);
+	CString text;
+	GetWindowText(text);
 
 	CRect rect;
 	GetClientRect(rect);
@@ -124,7 +124,7 @@ HBRUSH CStaticColor::CtlColor(CDC* pDC, UINT nCtlColor)
 	CRect TextRect(rect);
 	if (Style & SS_CENTERIMAGE)
 	{	// размер текста, который нужно отобразить, чтобы расcчитать как его центрировать
-		pDC->DrawText(m_text, rect, TextFormat | DT_CALCRECT | DT_NOCLIP);
+		pDC->DrawText(text, rect, TextFormat | DT_CALCRECT | DT_NOCLIP);
 		TextRect.top = TextRect.CenterPoint().y - rect.Height() / 2;
 		TextRect.bottom = TextRect.top + rect.Height();
 	}
@@ -132,15 +132,15 @@ HBRUSH CStaticColor::CtlColor(CDC* pDC, UINT nCtlColor)
 	if (IsWindowEnabled() != FALSE)
 	{
 		pDC->SetTextColor(m_colorText);
-		pDC->DrawText(m_text, TextRect, TextFormat);
+		pDC->DrawText(text, TextRect, TextFormat);
 	}
 	else
 	{
 		pDC->SetTextColor(GetSysColor(COLOR_WINDOW));
-		pDC->DrawText(m_text, TextRect, TextFormat);
+		pDC->DrawText(text, TextRect, TextFormat);
 
 		pDC->SetTextColor(GetSysColor(COLOR_GRAYTEXT));
-		pDC->DrawText(m_text, TextRect, TextFormat);
+		pDC->DrawText(text, TextRect, TextFormat);
 	}
 
 	ReleaseDC(pDC);
