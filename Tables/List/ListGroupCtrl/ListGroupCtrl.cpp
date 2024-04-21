@@ -822,7 +822,7 @@ int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
     switch (ps->m_sortType)
     {
     default:
-        return ps->m_control->GetItemData(lParam1) < ps->m_control->GetItemData(lParam2);
+        return ps->m_control->GetItemData((int)lParam1) < ps->m_control->GetItemData((int)lParam2);
     case CListGroupCtrl::SortType::eAscending:
         return ps->m_SortFunction(left, right);
     case CListGroupCtrl::SortType::eDescending:

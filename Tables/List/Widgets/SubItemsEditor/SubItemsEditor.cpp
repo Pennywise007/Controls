@@ -85,7 +85,7 @@ void CSubItemEditorWindow::createWindow(const CRect& rect)
 {
     // создаем окно
     if (CDialogEx::CreateEx(0, CString(typeid(*this).name()), L"",
-                            WS_VISIBLE,
+                            0,
                             0, 0, 0, 0,
                             NULL, nullptr, nullptr) == FALSE)
     {

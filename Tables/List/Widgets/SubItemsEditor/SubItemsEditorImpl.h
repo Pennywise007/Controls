@@ -182,6 +182,8 @@ void SubItemsEditor<CBaseList>::EditItem(int item, int subItem)
 
     // проставляем шрифт от таблицы
     editorControl->SetFont(CBaseList::GetFont());
+    
+    m_editSubItemWindow->ShowWindow(SW_SHOW);
 
     // ставим контрол на место
     CRect editControlRect;
