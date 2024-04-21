@@ -38,15 +38,19 @@ private:
 //----------------------------------------------------------------------------//
 LRESULT ComboWithSearch::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    switch (message)
+    // ignore when we execute search
+    if (m_filteredItems.empty())
     {
-        case CB_SETCURSEL:
+        switch (message)
         {
-            auto res = BaseCtrl::WindowProc(message, wParam, lParam);
+        case CB_SETCURSEL:
+            {
+                auto res = BaseCtrl::WindowProc(message, wParam, lParam);
 
-            updateRealCurSelFromCurrent();
+                updateRealCurSelFromCurrent();
 
-            return res;
+                return res;
+            }
         }
     }
 
@@ -86,7 +90,8 @@ BOOL ComboWithSearch::OnCbnSelendcancel()
 
     // восстанавливаем предыдущий выделенный элемент, делаем принудительно
     // потому что в поле может быть текст не соответствующий выделению(пустой например)
-    BaseCtrl::SetCurSel(m_realSel);
+    if (m_realSel != -1)
+        BaseCtrl::SetCurSel(m_realSel);
 
     return FALSE;
 }
@@ -154,7 +159,7 @@ void ComboWithSearch::executeSearch()
             try
             {
                 // экранируем спец символы регекса
-                const std::wregex re_regexEscape(_T("[.^$|()\\[\\]{}*+?\\\\]"));
+                const std::wregex re_regexEscape(_T("[.^$|()\\[\\]{}+?\\\\]"));
                 const std::wstring rep(_T("\\\\&"));
                 CString regexStr = std::regex_replace(curWindowText.GetString(),
                                                       re_regexEscape,
@@ -162,6 +167,7 @@ void ComboWithSearch::executeSearch()
                                                       std::regex_constants::format_sed |
                                                       std::regex_constants::match_default).c_str();
                 // формируем строку поиска для регекса
+                regexStr.Replace(L"*", L".*?");
                 regexStr.Replace(L" ", L".*?");
 
                 const std::wregex xRegEx(regexStr, std::regex::icase);
@@ -390,5 +396,6 @@ CurSelSaver::CurSelSaver(ISelectionSaver* pSaverClass)
 //----------------------------------------------------------------------------//
 CurSelSaver::~CurSelSaver()
 {
-    m_saverClass->setRealCurSel(m_savedRealSel);
+    if (m_savedRealSel != -1)
+        m_saverClass->setRealCurSel(m_savedRealSel);
 }
