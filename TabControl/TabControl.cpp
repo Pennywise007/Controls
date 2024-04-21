@@ -85,7 +85,7 @@ BOOL CTabControl::DeleteTab(_In_ int nItem)
     const auto res = CTabCtrl::DeleteItem(nItem);
     if (res == TRUE)
     {
-        ASSERT(nItem < m_tabWindows.size());
+        ASSERT(nItem < (int)m_tabWindows.size());
         m_tabWindows.erase(std::next(m_tabWindows.begin(), nItem));
     }
 

@@ -13,7 +13,9 @@ public:
     CTabControl() = default;
 
     operator CWnd&() { return *this; }
+    operator const CWnd&() const  { return *this; }
     CWnd& operator()() { return *this; }
+    const CWnd& operator()() const { return *this; }
 
 public:
     LONG AddTab(_In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CWnd>& tabWindow);
@@ -21,6 +23,9 @@ public:
 
     LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CWnd>& tabWindow);
     LONG InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CDialog>& tabDialog, UINT nIDTemplate);
+
+    using CTabCtrl::GetItem;
+    using CTabCtrl::SetItem;
 
     int GetCurSel() const;
     int SetCurSel(_In_ int nItem);
