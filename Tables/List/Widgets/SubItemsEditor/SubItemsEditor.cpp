@@ -3,6 +3,8 @@
 
 #include "SubItemsEditor.h"
 
+#include "../../../../Utils/WindowClassRegistrator.h"
+
 namespace controls::list::widgets {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,8 +74,7 @@ CSubItemEditorWindow::CSubItemEditorWindow(const CRect& rect, const LVSubItemPar
         wndClass.hInstance = instance;
         wndClass.lpszClassName = editLabelClassName;
 
-        if (!RegisterClassEx(&wndClass))
-            ::MessageBox(NULL, L"Can`t register class", L"Error", MB_OK);
+        static WindowsClassRegistrationLock lock(wndClass);
     }
 
     // создаем окно

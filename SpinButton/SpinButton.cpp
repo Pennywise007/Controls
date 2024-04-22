@@ -8,6 +8,8 @@
 
 #include "SpinButton.h"
 
+#include "../Utils/WindowClassRegistrator.h"
+
 #undef max
 
 namespace {
@@ -108,11 +110,10 @@ BOOL CSpinButton::Create(DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT
         wndClass.hInstance = instance;
         wndClass.lpszClassName = className;
 
-        if (!RegisterClassEx(&wndClass))
-            ::MessageBox(NULL, L"Can`t register class", L"Error", MB_OK);
+        static WindowsClassRegistrationLock registration(wndClass);
     }
 
-    return CWnd::Create(className, L"CSpinButton", dwStyle, rect, pParentWnd, nID, pContext);
+    return CWnd::Create(className, className, dwStyle, rect, pParentWnd, nID, pContext);
 }
 
 CRect CSpinButton::GetUpRect() const

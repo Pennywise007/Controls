@@ -3,12 +3,16 @@
 
 #include "TrayHelper.h"
 
+#include "../Utils/WindowClassRegistrator.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 // Tray icon messages
 #define WM_TRAY_ICON        (WM_APP + 100)
 
+namespace {
 // Tray icon identifier, should not be 0 to display balloons
-#define TRAY_ID             1
+constexpr auto kTrayId = 1;
+} // namespace
 
 //----------------------------------------------------------------------------//
 BEGIN_MESSAGE_MAP(CTrayHelper, CDialogEx)
@@ -19,7 +23,7 @@ END_MESSAGE_MAP()
 CTrayHelper::CTrayHelper()
 {
     HINSTANCE instance = AfxGetInstanceHandle();
-    CString className(typeid(*this).name());
+    const CString className(typeid(*this).name());
 
     // Register our class
     WNDCLASSEX wndClass;
@@ -30,11 +34,10 @@ CTrayHelper::CTrayHelper()
         wndClass.cbSize = sizeof(WNDCLASSEX);
         wndClass.style = CS_DBLCLKS;
         wndClass.lpfnWndProc = ::DefMDIChildProc;
-        wndClass.hInstance = instance;
+        wndClass.hInstance = AfxGetInstanceHandle();
         wndClass.lpszClassName = className;
 
-        if (!RegisterClassEx(&wndClass))
-            ::MessageBox(NULL, L"Can`t register class", L"Error", MB_OK);
+        static WindowsClassRegistrationLock rigistration(wndClass);
     }
 
     // Create an invisible window to handle tray events
@@ -49,7 +52,7 @@ CTrayHelper::CTrayHelper()
 
     m_niData.cbSize = sizeof(NOTIFYICONDATA);
     m_niData.hWnd = m_hWnd;
-    m_niData.uID = TRAY_ID;
+    m_niData.uID = kTrayId;
     m_niData.uCallbackMessage = WM_TRAY_ICON;
 }
 
