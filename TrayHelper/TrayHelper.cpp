@@ -3,7 +3,7 @@
 
 #include "TrayHelper.h"
 
-#include "../Utils/WindowClassRegistrator.h"
+#include "../Utils/WindowClassRegistration.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Tray icon messages
@@ -37,7 +37,7 @@ CTrayHelper::CTrayHelper()
         wndClass.hInstance = AfxGetInstanceHandle();
         wndClass.lpszClassName = className;
 
-        static WindowsClassRegistrationLock rigistration(wndClass);
+        static WindowClassRegistrationLock rigistration(wndClass);
     }
 
     // Create an invisible window to handle tray events

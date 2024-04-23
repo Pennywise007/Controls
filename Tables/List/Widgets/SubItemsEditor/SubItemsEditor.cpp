@@ -3,7 +3,7 @@
 
 #include "SubItemsEditor.h"
 
-#include "../../../../Utils/WindowClassRegistrator.h"
+#include "../../../../Utils/WindowClassRegistration.h"
 
 namespace controls::list::widgets {
 
@@ -74,7 +74,7 @@ CSubItemEditorWindow::CSubItemEditorWindow(const CRect& rect, const LVSubItemPar
         wndClass.hInstance = instance;
         wndClass.lpszClassName = editLabelClassName;
 
-        static WindowsClassRegistrationLock lock(wndClass);
+        static WindowClassRegistrationLock lock(wndClass);
     }
 
     // создаем окно

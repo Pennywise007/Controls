@@ -8,7 +8,7 @@
 
 #include "SpinButton.h"
 
-#include "../Utils/WindowClassRegistrator.h"
+#include "../Utils/WindowClassRegistration.h"
 
 #undef max
 
@@ -110,7 +110,7 @@ BOOL CSpinButton::Create(DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT
         wndClass.hInstance = instance;
         wndClass.lpszClassName = className;
 
-        static WindowsClassRegistrationLock registration(wndClass);
+        static WindowClassRegistrationLock registration(wndClass);
     }
 
     return CWnd::Create(className, className, dwStyle, rect, pParentWnd, nID, pContext);

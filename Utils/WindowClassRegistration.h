@@ -1,16 +1,16 @@
 ﻿#include <Windows.h>
 #include <string>
 
-struct WindowsClassRegistrationLock {
+struct WindowClassRegistrationLock {
 
-    WindowsClassRegistrationLock(WNDCLASSEX& wndClass)
+    WindowClassRegistrationLock(WNDCLASSEX& wndClass)
         : m_hInstance(wndClass.hInstance)
         , className(wndClass.lpszClassName)
     {
         ENSURE(::RegisterClassEx(&wndClass));
     }
 
-    ~WindowsClassRegistrationLock()
+    ~WindowClassRegistrationLock()
     {
         ENSURE(::UnregisterClass(className.c_str(), m_hInstance));
     }
