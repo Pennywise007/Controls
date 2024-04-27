@@ -155,7 +155,13 @@ void CIconButton::SetBitmap(_In_ UINT uiBitmapID,
 
             const UINT uiLoadImageFlags = LR_CREATEDIBSECTION | LR_LOADMAP3DCOLORS;
 
-            myBitMap.Attach(::LoadImage(hinstRes, lpszResourceName, IMAGE_BITMAP, 0, 0, uiLoadImageFlags));
+            auto bitmap = ::LoadImage(hinstRes, lpszResourceName, IMAGE_BITMAP, 0, 0, uiLoadImageFlags);
+            if (bitmap == NULL)
+            {
+                ASSERT(FALSE);
+                return;
+            }
+            myBitMap.Attach(bitmap);
         }
     }
     SetBitmap(myBitMap, Alignment, BitmapWidth, BitmapHeight, useTransparentColor, transparentColor);
@@ -181,8 +187,6 @@ void CIconButton::SetBitmap(_In_ CBitmap& hBitmap,
             if (BitmapHeight == kUseImageSize)
                 BitmapHeight = bitmap.bmHeight;
         }
-
-        DeleteObject(&bitmap);
     }
 
     m_image.SetImageSize(SIZE{ BitmapWidth, BitmapHeight });
