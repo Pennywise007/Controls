@@ -5,7 +5,7 @@
 BEGIN_MESSAGE_MAP(CTabControl, CTabCtrl)
     ON_WM_ERASEBKGND()
     ON_WM_SIZE()
-    ON_NOTIFY_REFLECT(TCN_SELCHANGE, &CTabControl::OnTcnSelchange)
+    ON_NOTIFY_REFLECT_EX(TCN_SELCHANGE, &CTabControl::OnTcnSelchange)
 END_MESSAGE_MAP()
 
 LONG CTabControl::AddTab(_In_z_ LPCTSTR lpszItem, _In_ const  std::shared_ptr<CWnd>& tabWindow)
@@ -101,10 +101,11 @@ BOOL CTabControl::DeleteAllItems()
     return res;
 }
 
-void CTabControl::OnTcnSelchange(NMHDR* /*pNMHDR*/, LRESULT* pResult)
+BOOL CTabControl::OnTcnSelchange(NMHDR* /*pNMHDR*/, LRESULT* pResult)
 {
     onSelChanged();
     *pResult = 0;
+    return FALSE;
 }
 
 void CTabControl::onSelChanged()

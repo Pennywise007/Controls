@@ -47,7 +47,7 @@ public:
 
     afx_msg BOOL OnEraseBkgnd(CDC* pDC);
     afx_msg void OnSize(UINT nType, int cx, int cy);
-    afx_msg void OnTcnSelchange(NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg BOOL OnTcnSelchange(NMHDR *pNMHDR, LRESULT *pResult);
 
 private:
     // positions the currently active window in the client tab area
