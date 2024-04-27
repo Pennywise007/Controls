@@ -5,6 +5,8 @@
 #include <list>
 #include <unordered_map>
 
+#include <ext/core/tracer.h>
+
 /*
 * DefaultWindowProc manager, allow to add callbacks on window messages
 *
@@ -28,7 +30,8 @@ public:
         ENSURE(!!handler);
 
         DefaultWindowProc& instance = Instance();
-        instance.TryAttachToWindowProc(targetWindow);
+        if (!instance.TryAttachToWindowProc(targetWindow))
+            return;
 
         auto windowInfoIt = instance.m_windowsInfo.find(static_cast<HWND>(targetWindow));
         ASSERT(windowInfoIt != instance.m_windowsInfo.end());
@@ -146,10 +149,19 @@ private:
         return s;
     }
     // checking if we already attached to window def window proc, if no - attach
-    void TryAttachToWindowProc(HWND hWnd)
+    bool TryAttachToWindowProc(HWND hWnd)
     {
         if (m_windowsInfo.find(hWnd) == m_windowsInfo.end())
-            m_windowsInfo.emplace(hWnd, WindowInfo((WNDPROC)::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WindowProc)));
+        {
+            auto windowPros = (WNDPROC)::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WindowProc);
+            if (windowPros == nullptr)
+            {
+                ASSERT(!"Failed to change window proc");
+                return false;
+            }
+            m_windowsInfo.emplace(hWnd, WindowInfo(windowPros));
+        }
+        return true;
     }
     // if we don`t need to handle def window proc but we do - detach
     void CheckNecessityToHandleDefProc(HWND hWnd)
