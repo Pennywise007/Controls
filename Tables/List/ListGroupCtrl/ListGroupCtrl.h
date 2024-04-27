@@ -58,21 +58,17 @@
 //*************************************************************************************************
 class CListGroupCtrl : public CListCtrl
 {
+    // Store items real index(with which it was inserted)
+    void SetDefaultItemIndex(int nCurrentItem, int nRealItem);
+    // Use SetItemDataPtr and GetItemDataPtr
+    using CListCtrl::GetItemData;
+    using CListCtrl::SetItemData;
 public:	//*****************************************************************************************
     // если true - то при сортировке произойдет обьединение в группы по номеру колонки
     // если false - то просто отсортируются
     bool m_ChangeGroupsWhileSort = false;
 public:	//*****************************************************************************************
     CListGroupCtrl();
-    //*********************************************************************************************
-    // Создаем группу
-    // Parameter: nIndex    - индекс группы в дереве, можно задать нулевыми
-    // Parameter: nGroupID  - индекс группы
-    // Parameter: strHeader - название группы
-    // Parameter: dwState	- состояние группы например LVGS_COLLAPSIBLE | LVGS_COLLAPSED
-    // Parameter: dwAlign	- привязка названия группы относительно всего контрола
-    LRESULT InsertGroupHeader(_In_ int nIndex, _In_ int nGroupID, _In_ const CString& strHeader,
-                              _In_opt_ DWORD dwState = LVGS_NORMAL, _In_opt_ DWORD dwAlign = LVGA_HEADER_LEFT);
     //*********************************************************************************************
     // Добавление строчки в таблицу с привязкой к группе
     // Returns:   int		- индекс добавленного элемента
@@ -82,6 +78,44 @@ public:	//**********************************************************************
     int InsertItem(_In_ int nItem, _In_ int nGroupID, _In_z_ LPCTSTR lpszItem);
     // стандартное добавление элемента
     int InsertItem(_In_ int nItem, _In_z_ LPCTSTR lpszItem);
+    int InsertItem(_In_ const LVITEM* pItem);
+    //*********************************************************************************************
+    // Sets the text associated with a particular item.
+    BOOL SetItemText(_In_ int nItem, _In_ int nSubItem, _In_z_ LPCTSTR lpszText);
+    //*********************************************************************************************
+    void SetItemDataPtr(int nIndex, void* pData);
+    void* GetItemDataPtr(int nIndex) const;
+    // During data sorting control will remove items
+    // Returns: default(inserted) item index of currently visible item
+    int GetDefaultItemIndex(int nCurrentItem) const;
+    // During data sorting control will remove items
+    // Returns: current index in table based on default(inserted) item, -1 if item was sorted
+    int GetCurrentIndexFromDefaultItem(int nDefaultItem) const;
+    //**********************************************************************************************
+// 	BOOL SetDefaultItemText(_In_ int nItem, _In_ int nSubItem, _In_z_ LPCTSTR lpszText);
+// 	// возвращает выбран элемент сейчас или нет
+// 	BOOL GetDefaultItemCheck(_In_ int nRow);
+    //**********************************************************************************************
+    // Перемещение элемента по списку
+    // itemFirst - индекс перемещаемого элемента
+    // moveUp    - перемещать вверх или вниз
+    // Returns:  - индекс элемента после перемещения
+    int MoveItem(_In_ int itemFirst, _In_ bool moveUp);
+    // Move currently selected items in list
+    // moveUp    - move up or down
+    void MoveSelectedItems(_In_ bool moveUp);
+    // Removes all items from the control.
+    BOOL DeleteAllItems();
+    BOOL DeleteItem(_In_ int nItem);
+    // поиск по таблице
+    void FindItems(_In_ CString sFindString);
+    // bMatchAll - если true то ищем совпадение со всеми элементами массива, если false - то хотябы с одним
+    void FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll = false);
+    void ResetSearch();
+    //*********************************************************************************************
+    void SelectItem(int nItem, bool ensureVisible = true);
+    std::vector<int> GetSelectedItems() const;
+    void ClearSelection();
     //*********************************************************************************************
     // добавление колонки с указателем на функцию сортировки
     // SortFunct - функция сортировки, должна возвращать число и принимать 2 строки типа CString
@@ -93,36 +127,32 @@ public:	//**********************************************************************
                      _In_opt_ int nSubItem = -1, _In_opt_ std::function<int(const CString&, const CString&)> SortFunct = nullptr);
     // стандартное добавление колонки
     int InsertColumn(_In_ int nCol, _In_ const LVCOLUMN* pColumn);
-    // Add list of columns which will keep the size on resize control
-    void SetProportionalResizingColumns(const std::unordered_set<int>& columns);
-    //**********************************************************************************************
-    // Перемещение элемента по списку
-    // itemFirst - индекс перемещаемого элемента
-    // moveUp    - перемещать вверх или вниз
-    // Returns:  - индекс элемента после перемещения
-    int MoveItem(_In_ int itemFirst, _In_ bool moveUp);
-    //**********************************************************************************************
-// 	BOOL SetDefaultItemText(_In_ int nItem, _In_ int nSubItem, _In_z_ LPCTSTR lpszText);
-// 	// возвращает выбран элемент сейчас или нет
-// 	BOOL GetDefaultItemCheck(_In_ int nRow);
-    //*********************************************************************************************
-    // меняем стиль таблицы LVS_EX_CHECKBOXES - чекбоксы
-    BOOL ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags = 0);
     //*********************************************************************************************
     // автомасштабирование колонок в зависимости от размеров контрола, колонки становятся одинакового размера
     void AutoScaleColumns();
     // автомасштабирование колонки по содержимому
     void FitToContentColumn(int nCol, bool bIncludeHeaderContent);
+    // Add list of columns which will keep the size on resize control
+    void SetProportionalResizingColumns(const std::unordered_set<int>& columns);
     //*********************************************************************************************
-    // поиск по таблице
-    void FindItems(_In_ CString sFindString);
-    // bMatchAll - если true то ищем совпадение со всеми элементами массива, если false - то хотябы с одним
-    void FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll = false);
+    // меняем стиль таблицы LVS_EX_CHECKBOXES - чекбоксы
+    BOOL ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags = 0);
     //*********************************************************************************************
-    // возвращает текущий индекс у ранее добавленного элемента
-    int GetCurrentRowIndex(_In_ int nRow);
-    // возвращает изначальный индекс по текущему индексу
-    int GetDefaultRowIndex(_In_ int nRow);
+    // все элементы таблицы будут выбраны в зависимости от bCkeched
+    void CheckAllElements(bool bChecked);
+    void CheckEntireGroup(int nGroupId, bool bChecked);
+    // получаем список выбранных элементов
+    // bCurrentIndexes - true то возвращаются текущие индкексы | false - индексы которые были при добавлении данных
+    std::vector<int> GetCheckedList(_In_opt_ bool bCurrentIndexes = true) const;
+    //*********************************************************************************************
+    // Создаем группу
+    // Parameter: nIndex    - индекс группы в дереве, можно задать нулевыми
+    // Parameter: nGroupID  - индекс группы
+    // Parameter: strHeader - название группы
+    // Parameter: dwState	- состояние группы например LVGS_COLLAPSIBLE | LVGS_COLLAPSED
+    // Parameter: dwAlign	- привязка названия группы относительно всего контрола
+    LRESULT InsertGroupHeader(_In_ int nIndex, _In_ int nGroupID, _In_ const CString& strHeader,
+                              _In_opt_ DWORD dwState = LVGS_NORMAL, _In_opt_ DWORD dwAlign = LVGA_HEADER_LEFT);
     //*********************************************************************************************
     CString GetGroupHeader(int nGroupID);
     int GetRowGroupId(int nRow);
@@ -136,25 +166,8 @@ public:	//**********************************************************************
     BOOL SetGroupState(int nGroupID, DWORD dwState);
     BOOL IsGroupStateEnabled();
     //*********************************************************************************************
-    // все элементы таблицы будут выбраны в зависимости от bCkeched
-    void CheckAllElements(bool bChecked);
-    void CheckEntireGroup(int nGroupId, bool bChecked);
-    // получаем список выбранных элементов
-    // bCurrentIndexes - true то возвращаются текущие индкексы | false - индексы которые были при добавлении данных
-    void GetCheckedList(_Out_ std::vector<int> &CheckedList, _In_opt_ bool bCurrentIndexes = false) const;
-    //*********************************************************************************************
-    void ClearSelection();
-    void SelectItem(int nItem, bool ensureVisible = true);
-    void GetSelectedList(_Out_ std::vector<int> &selectedItems, _In_opt_ bool bCurrentIndexes = false) const;
-    //*********************************************************************************************
     void CollapseAllGroups();	// свернуть все группы
     void ExpandAllGroups();		// развернуть все группы
-    //*********************************************************************************************
-    // Removes all items from the control.
-    BOOL DeleteAllItems();
-    //*********************************************************************************************
-    // Sets the text associated with a particular item.
-    BOOL SetItemText(_In_ int nItem, _In_ int nSubItem, _In_z_ LPCTSTR lpszText);
     //*********************************************************************************************
     BOOL SetGroupFooter(int nGroupID, const CString& footer, DWORD dwAlign = LVGA_FOOTER_CENTER);
     BOOL SetGroupTask(int nGroupID, const CString& task);
@@ -182,6 +195,7 @@ protected:
 protected://***************************************************************************************
     virtual void PreSubclassWindow() override;
     //*********************************************************************************************
+    afx_msg void OnDestroy();
     afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
     afx_msg BOOL OnHeaderClick(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg BOOL OnListItemChanged(NMHDR* pNMHDR, LRESULT* pResult);

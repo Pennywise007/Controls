@@ -5,10 +5,17 @@
 #include <shlwapi.h>
 #include "Resource.h"
 #include <algorithm>
+#include <memory>
 
 #include "Controls/ThemeManagement.h"
 
 namespace {
+
+struct ListItemData
+{
+    void* userDataPtr = nullptr;
+    int defaultItemIndex = 0;
+};
 
 bool is_key_pressed(UINT keyCode)
 {
@@ -46,6 +53,7 @@ BEGIN_MESSAGE_MAP(CListGroupCtrl, CListCtrl)
     ON_WM_KEYDOWN()
     ON_WM_SIZE()
     ON_WM_ERASEBKGND()
+    ON_WM_DESTROY()
 END_MESSAGE_MAP()
 
 CListGroupCtrl::CListGroupCtrl()
@@ -75,38 +83,6 @@ CListGroupCtrl::CListGroupCtrl()
     sCheckAll			= L"Выбрать все элементы";
     sUnCheckALL			= L"Отменить выбор всех элементов";
 #endif
-}
-
-LRESULT CListGroupCtrl::InsertGroupHeader(_In_ int nIndex, _In_ int nGroupID, _In_ const CString& strHeader,
-                                          _In_opt_ DWORD dwState /*= LVGS_NORMAL*/, _In_opt_ DWORD dwAlign /*= LVGA_HEADER_LEFT*/)
-{
-    EnableGroupView(TRUE);
-
-    LVGROUP lg = { 0 };
-    lg.cbSize = sizeof(lg);
-    lg.iGroupId = nGroupID;
-    lg.state = dwState;
-    lg.mask = LVGF_GROUPID | LVGF_HEADER | LVGF_STATE | LVGF_ALIGN | LVGS_COLLAPSIBLE | LVGS_COLLAPSED;
-    lg.uAlign = dwAlign;
-
-    // Header-title must be unicode (Convert if necessary)
-#ifdef UNICODE
-    lg.pszHeader = (LPWSTR)(LPCTSTR)strHeader;
-    lg.cchHeader = strHeader.GetLength();
-#else
-    CComBSTR header = strHeader;
-    lg.pszHeader = header;
-    lg.cchHeader = header.Length();
-#endif
-
-    int Res = InsertGroup(nIndex, (PLVGROUP)&lg);
-
-    if (GetExtendedStyle() & LVS_EX_CHECKBOXES)
-    {
-        SetGroupTask(nGroupID, sCheckGroup);	// Check Group
-    }
-
-    return Res;
 }
 
 bool CListGroupCtrl::CheckInsertedElement(_In_ int nItem, _In_ int nGroupID, _In_z_ LPCTSTR lpszItem)
@@ -139,7 +115,11 @@ bool CListGroupCtrl::CheckInsertedElement(_In_ int nItem, _In_ int nGroupID, _In
         lvi.stateMask = LVIS_STATEIMAGEMASK;
         lvi.iItem = nItem;
         lvi.iSubItem = 0;
-        lvi.lParam = nItem;
+
+        auto itemData = std::make_unique<ListItemData>();
+        itemData->defaultItemIndex = nItem;
+        lvi.lParam = LPARAM(itemData.release());
+
         lvi.iGroupId = CListCtrl::GetGroupInfo(nGroupID, &Str);
         lvi.pszText = NewText.GetBuffer();
         lvi.cchTextMax = NewText.GetLength();
@@ -175,7 +155,7 @@ int CListGroupCtrl::InsertItem(_In_ int nItem, _In_ int nGroupID, _In_z_ LPCTSTR
     if (CheckInsertedElement(nItem, nGroupID, lpszItem))
     {
         Res = CListCtrl::InsertItem(nItem, lpszItem);
-        SetItemData(Res, nItem);
+        SetDefaultItemIndex(Res, nItem);
         SetRowGroupId(Res, nGroupID);
 
         //Resort();
@@ -183,18 +163,316 @@ int CListGroupCtrl::InsertItem(_In_ int nItem, _In_ int nGroupID, _In_z_ LPCTSTR
 
     return Res;
 }
+
 int CListGroupCtrl::InsertItem(_In_ int nItem, _In_z_ LPCTSTR lpszItem)
 {
     int Res(nItem);
     if (CheckInsertedElement(nItem, -1, lpszItem))
     {
         Res = CListCtrl::InsertItem(nItem, lpszItem);
-        SetItemData(Res, nItem);
+        SetDefaultItemIndex(Res, nItem);
 
         //Resort();
     }
 
     return Res;
+}
+
+int CListGroupCtrl::InsertItem(_In_ const LVITEM* pItem)
+{
+    int Res(pItem->iItem);
+    if (CheckInsertedElement(pItem->iItem, -1, pItem->pszText))
+    {
+        Res = CListCtrl::InsertItem(pItem);
+        SetDefaultItemIndex(Res, pItem->iItem);
+
+        //Resort();
+    }
+
+    return Res;
+}
+
+BOOL CListGroupCtrl::SetItemText(_In_ int nItem, _In_ int nSubItem, _In_z_ LPCTSTR lpszText)
+{
+    // ещем среди удаленных элементов если ли там элемент который мы хотим изменить
+    auto it = std::find_if(m_DeletedItems.begin(), m_DeletedItems.end(), [&](const DeletedItemsInfo& Item)
+    {
+        return Item.ItemData.iItem == nItem;
+    });
+
+    if (it == m_DeletedItems.end())
+    {
+        // если не нашли то устанавливаем текст
+        return CListCtrl::SetItemText(nItem, nSubItem, lpszText);
+    }
+    else
+    {
+        // заносим новые данные в необходимую колонку удаленного элемента
+        if ((int)it->ColumnsText.size() <= nSubItem)
+            it->ColumnsText.resize(nSubItem + 1);
+        it->ColumnsText[nSubItem] = lpszText;
+
+        if (bIsNeedToRestoreDeletedItem(it))
+            m_DeletedItems.erase(it);
+    }
+
+    return TRUE;
+}
+
+void CListGroupCtrl::SetItemDataPtr(int nIndex, void* pData)
+{
+    ASSERT(nIndex < GetItemCount());
+
+    auto data = CListCtrl::GetItemData(nIndex);
+    ASSERT(data != 0);
+    ListItemData* itemData = (ListItemData*)data;
+    itemData->userDataPtr = pData;
+}
+
+void* CListGroupCtrl::GetItemDataPtr(int nIndex) const
+{
+    ASSERT(nIndex < GetItemCount());
+    ListItemData* itemData = (ListItemData*)CListCtrl::GetItemData(nIndex);
+    return itemData->userDataPtr;
+}
+
+int CListGroupCtrl::GetDefaultItemIndex(int nCurrentItem) const
+{
+    auto itemData = CListCtrl::GetItemData(nCurrentItem);
+    ASSERT(itemData != 0);
+    return ((ListItemData*)itemData)->defaultItemIndex;
+}
+
+void CListGroupCtrl::SetDefaultItemIndex(int nCurrentItem, int nRealItem)
+{
+    ASSERT(CListCtrl::GetItemData(nCurrentItem) == 0);
+    auto itemData = std::make_unique<ListItemData>();
+    itemData->defaultItemIndex = nRealItem;
+    CListCtrl::SetItemData(nCurrentItem, DWORD_PTR(itemData.release()));
+}
+
+int CListGroupCtrl::GetCurrentIndexFromDefaultItem(_In_ int nDefaultItem) const
+{
+    // ищем по отображаемым данным, есть ли там запрашиваемый жлемент
+    for (int Row = 0, nItemsCount = CListCtrl::GetItemCount(); Row < nItemsCount; ++Row)
+    {
+        if (GetDefaultItemIndex(Row) == nDefaultItem)
+            return Row;
+    }
+
+    return -1;
+}
+
+int CListGroupCtrl::MoveItem(int itemIndex, bool moveUp)
+{
+    const int itemsCount = GetItemCount();
+
+    if (itemsCount <= 1 || itemIndex == -1)
+        return itemIndex;
+
+    const auto swapItemsData = [list = this](int itemFirst, int itemSecond)
+    {
+        CString strFirst, strSecond;
+        for (int i = 0, countColumns = list->GetHeaderCtrl()->GetItemCount(); i < countColumns; ++i)
+        {
+            strFirst = std::move(list->GetItemText(itemFirst, i));
+            strSecond = std::move(list->GetItemText(itemSecond, i));
+            list->SetItemText(itemFirst, i, strSecond);
+            list->SetItemText(itemSecond, i, strFirst);
+        }
+
+        ListItemData* dataFirst = (ListItemData*)list->GetItemData(itemFirst);
+        ListItemData* dataSecond = (ListItemData*)list->GetItemData(itemSecond);
+        list->SetItemData(itemFirst, (DWORD_PTR)dataSecond);
+        list->SetItemData(itemSecond, (DWORD_PTR)dataFirst);
+
+        // Swap selection
+        const bool bItemFirstSelected = list->GetItemState(itemFirst, LVIS_SELECTED) & LVNI_SELECTED;
+        const bool bItemSecondSelected = list->GetItemState(itemSecond, LVIS_SELECTED) & LVNI_SELECTED;
+
+        list->SetItemState(itemFirst, bItemSecondSelected ? LVNI_SELECTED : ~LVNI_SELECTED, LVIS_SELECTED);
+        list->SetItemState(itemSecond, bItemFirstSelected ? LVNI_SELECTED : ~LVNI_SELECTED, LVIS_SELECTED);
+    };
+
+    // swap items index
+    int swapItem = moveUp ? itemIndex - 1 : itemIndex + 1;
+
+    if (swapItem < 0)
+    {
+        swapItem = InsertItem(GetItemCount(), L"");
+        swapItemsData(itemIndex, swapItem--);
+        CListCtrl::DeleteItem(itemIndex);
+    }
+    else if (swapItem >= GetItemCount())
+    {
+        swapItem = InsertItem(0, L"");
+        swapItemsData(++itemIndex, swapItem);
+        CListCtrl::DeleteItem(itemIndex);
+    }
+    else
+    {
+        swapItemsData(itemIndex, swapItem);
+    }
+
+    EnsureVisible(swapItem, FALSE);
+    return swapItem;
+}
+
+void CListGroupCtrl::MoveSelectedItems(bool moveUp)
+{
+    std::vector<int> selectedItems = GetSelectedItems();
+    ASSERT(!selectedItems.empty());
+
+    if (moveUp)
+    {
+        if (selectedItems.front() == 0)
+        {
+            MoveItem(selectedItems.front(), true);
+        }
+        else
+        {
+            for (auto item : selectedItems)
+            {
+                MoveItem(item, true);
+            }
+        }
+    }
+    else
+    {
+        if (selectedItems.back() == GetItemCount() - 1)
+        {
+            MoveItem(selectedItems.back(), false);
+        }
+        else
+        {
+            for (auto it = selectedItems.rbegin(), end = selectedItems.rend(); it != end; ++it)
+            {
+                MoveItem(*it, false);
+            }
+        }
+    }
+}
+
+BOOL CListGroupCtrl::DeleteAllItems()
+{
+    for (int item = 0, size = GetItemCount(); item < size; ++item)
+    {
+        std::unique_ptr<ListItemData> itemData((ListItemData*)CListCtrl::GetItemData(item));
+    }
+    for (auto& deletedItem : m_DeletedItems)
+    {
+        std::unique_ptr<ListItemData> itemData((ListItemData*)deletedItem.ItemData.lParam);
+    }
+    m_DeletedItems.clear();
+    return CListCtrl::DeleteAllItems();
+}
+
+BOOL CListGroupCtrl::DeleteItem(int nItem)
+{
+    std::unique_ptr<ListItemData> itemData((ListItemData*)CListCtrl::GetItemData(nItem));
+    return CListCtrl::DeleteItem(nItem);
+}
+
+void CListGroupCtrl::FindItems(_In_ CString sFindString)
+{
+    FindItems(std::list<CString>{ std::move(sFindString) });
+}
+
+void CListGroupCtrl::FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll /*= false*/)
+{
+    m_sFindStrings = sFindStrings;
+    m_bMatchAll = bMatchAll;
+
+    // сортируем данные в массиве чтобы последовательно их загрузить в контрол
+    m_DeletedItems.sort([](const DeletedItemsInfo& Item1, const DeletedItemsInfo& Item2) -> bool
+    {
+        return Item1.ItemData.iItem < Item2.ItemData.iItem;
+    });
+
+    // восстанавливаем список удаленных элементов m_DeletedItems
+    for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end();)
+    {
+        if (bIsNeedToRestoreDeletedItem(it))
+            it = m_DeletedItems.erase(it);
+        else
+            ++it;
+    }
+
+    int nTotalColumns = GetHeaderCtrl()->GetItemCount();
+    // проходим по всем элементам и удаляем те, которые не попали под критерии поиска
+    for (int Row = CListCtrl::GetItemCount() - 1; Row >= 0; Row--)
+    {
+        // флаг того, что в строчке есть элементы удовлетворяющие поиску
+        bool bFind = bMatchAll;
+        for (auto&& it : sFindStrings)
+        {
+            if (bMatchAll)// првоеряем что строчка таблицы должна совпадать со всеми элементами вектора
+                bFind &= FindItemInTable(std::move(it), Row);
+            else // првоеряем что строчка таблицы должна совпадать хотябы с одним элементом вектора
+                bFind |= FindItemInTable(std::move(it), Row);
+        }
+
+        // если строчка не совпала с существующими, то удаляем ее
+        if (!bFind)
+        {
+            LVITEM lvi = { 0 };
+            lvi.mask = LVIF_GROUPID | TVIF_PARAM | LVIF_STATE | LVIF_TEXT;
+            lvi.stateMask = LVIS_STATEIMAGEMASK;
+            lvi.iItem = Row;
+            CListCtrl::GetItem(&lvi);
+
+            m_DeletedItems.push_back({ CListCtrl::GetCheck(Row), lvi });
+            m_DeletedItems.back().ColumnsText.resize(nTotalColumns);
+            for (auto Column = 0; Column < nTotalColumns; ++Column)
+            {
+                m_DeletedItems.back().ColumnsText[Column] = CListCtrl::GetItemText(Row, Column);
+            }
+
+            CListCtrl::DeleteItem(Row);
+        }
+    }
+
+    Resort();
+}
+
+void CListGroupCtrl::ResetSearch()
+{
+    FindItems(L"");
+}
+
+void CListGroupCtrl::SelectItem(int nItem, bool ensureVisible /*= true*/)
+{
+    SetItemState(nItem, LVIS_SELECTED, LVIS_SELECTED);
+    if (ensureVisible)
+        EnsureVisible(nItem, TRUE);
+}
+
+std::vector<int> CListGroupCtrl::GetSelectedItems() const
+{
+    std::vector<int> selectedItems;
+    if (const UINT selCount = GetSelectedCount(); selCount != 0)
+    {
+        selectedItems.resize(selCount);
+
+        POSITION pos = GetFirstSelectedItemPosition();
+        for (UINT index = 0; index < selCount; ++index)
+        {
+            selectedItems[index] = GetNextSelectedItem(pos);
+        }
+    }
+    return selectedItems;
+}
+
+void CListGroupCtrl::ClearSelection()
+{
+    if (const UINT selCount = GetSelectedCount(); selCount != 0)
+    {
+        POSITION pos = GetFirstSelectedItemPosition();
+        for (UINT index = 0; index < selCount; ++index)
+        {
+            SetItemState(GetNextSelectedItem(pos), 0, LVIS_SELECTED);
+        }
+    }
 }
 
 int CListGroupCtrl::InsertColumn(_In_ int nCol, _In_ LPCTSTR lpszColumnHeading, _In_opt_ int nFormat /*= LVCFMT_LEFT*/, _In_opt_ int nWidth /*= -1*/,
@@ -224,6 +502,26 @@ int CListGroupCtrl::InsertColumn(_In_ int nCol, _In_ const LVCOLUMN* pColumn)
     return CListCtrl::InsertColumn(nCol, pColumn);
 }
 
+void CListGroupCtrl::AutoScaleColumns()
+{
+    const int CountColumns = GetHeaderCtrl()->GetItemCount();
+    if (CountColumns != 0)
+    {
+        CRect Rect;
+        GetClientRect(Rect);
+
+        const int Width = Rect.Width() / CountColumns;
+        for (int Column = 0; Column < CountColumns; Column++)
+            CListCtrl::SetColumnWidth(Column, Width);
+    }
+}
+
+void CListGroupCtrl::FitToContentColumn(int nCol, bool bIncludeHeaderContent)
+{
+    const int flag = bIncludeHeaderContent ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE;
+    ListView_SetColumnWidth(m_hWnd, nCol, flag);
+}
+
 void CListGroupCtrl::SetProportionalResizingColumns(const std::unordered_set<int>& columns)
 {
     m_columnsProportions.clear();
@@ -248,101 +546,109 @@ void CListGroupCtrl::SetProportionalResizingColumns(const std::unordered_set<int
     }
 }
 
-int CListGroupCtrl::MoveItem(int itemIndex, bool moveUp)
+BOOL CListGroupCtrl::ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags /*= 0*/)
 {
-    const int itemsCount = GetItemCount();
+    SetExtendedStyle(GetExtendedStyle() | dwAdd);
 
-    if (itemsCount <= 1 || itemIndex == -1)
-        return itemIndex;
-
-    const auto swapItemsData = [list = this](int itemFirst, int itemSecond)
+    if (dwAdd & LVS_EX_CHECKBOXES)
     {
-        CString strFirst, strSecond;
-        for (int i = 0, countColumns = list->GetHeaderCtrl()->GetItemCount(); i < countColumns; ++i)
+        const HWND header = *GetHeaderCtrl();
+        DWORD dwHeaderStyle = ::GetWindowLong(header, GWL_STYLE);
+        dwHeaderStyle |= HDS_CHECKBOXES;
+        ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
+    }
+
+    return CListCtrl::ModifyStyle(dwRemove, 0, nFlags);
+}
+
+void CListGroupCtrl::CheckAllElements(bool bChecked)
+{
+    for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end(); ++it)
+    {
+        it->bChecked = bChecked;
+    }
+
+    CheckElements(bChecked);
+}
+
+void CListGroupCtrl::CheckEntireGroup(int nGroupId, bool bChecked)
+{
+    if (!(GetExtendedStyle() & LVS_EX_CHECKBOXES))
+        return;
+
+    for (int nRow = 0; nRow < GetItemCount(); ++nRow)
+    {
+        if (GetRowGroupId(nRow) == nGroupId)
         {
-            strFirst = std::move(list->GetItemText(itemFirst, i));
-            strSecond = std::move(list->GetItemText(itemSecond, i));
-            list->SetItemText(itemFirst, i, strSecond);
-            list->SetItemText(itemSecond, i, strFirst);
+            SetCheck(nRow, bChecked ? TRUE : FALSE);
+        }
+    }
+}
+
+std::vector<int> CListGroupCtrl::GetCheckedList(_In_opt_ bool currentIndexes /*= true*/) const
+{
+    std::vector<int> checkedList;
+    const int nItemsCount = CListCtrl::GetItemCount();
+
+    if (currentIndexes)
+    {
+        checkedList.reserve(nItemsCount);
+
+        for (int Row = 0; Row < nItemsCount; ++Row)
+        {
+            if (GetCheck(Row) != BST_UNCHECKED)
+                checkedList.push_back(Row);
+        }
+    }
+    else
+    {
+        checkedList.reserve(nItemsCount + m_DeletedItems.size());
+
+        for (int Row = 0; Row < nItemsCount; ++Row)
+        {
+            if (GetCheck(Row) != BST_UNCHECKED)
+                checkedList.push_back(GetDefaultItemIndex(Row));
         }
 
-        // Swap selection
-        const bool bItemFirstSelected = list->GetItemState(itemFirst, LVIS_SELECTED) & LVNI_SELECTED;
-        const bool bItemSecondSelected = list->GetItemState(itemSecond, LVIS_SELECTED) & LVNI_SELECTED;
-
-        list->SetItemState(itemFirst, bItemSecondSelected ? LVNI_SELECTED : ~LVNI_SELECTED, LVIS_SELECTED);
-        list->SetItemState(itemSecond, bItemFirstSelected ? LVNI_SELECTED : ~LVNI_SELECTED, LVIS_SELECTED);
-    };
-
-    // swap items index
-    int swapItem = moveUp ? itemIndex - 1 : itemIndex + 1;
-
-    if (swapItem < 0)
-    {
-        swapItem = InsertItem(GetItemCount(), L"");
-        swapItemsData(itemIndex, swapItem--);
-        DeleteItem(itemIndex);
+        for (const auto& it : m_DeletedItems)
+        {
+            if (it.bChecked)
+                checkedList.push_back(((ListItemData*)it.ItemData.lParam)->defaultItemIndex);
+        }
     }
-    else if (swapItem >= GetItemCount())
-    {
-        swapItem = InsertItem(0, L"");
-        swapItemsData(++itemIndex, swapItem);
-        DeleteItem(itemIndex);
-    }
-    else
-    {
-        swapItemsData(itemIndex, swapItem);
-    }
-
-    EnsureVisible(swapItem, FALSE);
-    return swapItem;
+    return checkedList;
 }
 
-BOOL CListGroupCtrl::SetItemText(_In_ int nItem, _In_ int nSubItem, _In_z_ LPCTSTR lpszText)
+LRESULT CListGroupCtrl::InsertGroupHeader(_In_ int nIndex, _In_ int nGroupID, _In_ const CString& strHeader,
+                                          _In_opt_ DWORD dwState /*= LVGS_NORMAL*/, _In_opt_ DWORD dwAlign /*= LVGA_HEADER_LEFT*/)
 {
-    // ещем среди удаленных элементов если ли там элемент который мы хотим изменить
-    auto it = std::find_if(m_DeletedItems.begin(), m_DeletedItems.end(), [&](const DeletedItemsInfo& Item)
-                           {
-                               return Item.ItemData.iItem == nItem;
-                           });
+    EnableGroupView(TRUE);
 
-    if (it == m_DeletedItems.end())
+    LVGROUP lg = { 0 };
+    lg.cbSize = sizeof(lg);
+    lg.iGroupId = nGroupID;
+    lg.state = dwState;
+    lg.mask = LVGF_GROUPID | LVGF_HEADER | LVGF_STATE | LVGF_ALIGN | LVGS_COLLAPSIBLE | LVGS_COLLAPSED;
+    lg.uAlign = dwAlign;
+
+    // Header-title must be unicode (Convert if necessary)
+#ifdef UNICODE
+    lg.pszHeader = (LPWSTR)(LPCTSTR)strHeader;
+    lg.cchHeader = strHeader.GetLength();
+#else
+    CComBSTR header = strHeader;
+    lg.pszHeader = header;
+    lg.cchHeader = header.Length();
+#endif
+
+    int Res = InsertGroup(nIndex, (PLVGROUP)&lg);
+
+    if (GetExtendedStyle() & LVS_EX_CHECKBOXES)
     {
-        // если не нашли то устанавливаем текст
-        return CListCtrl::SetItemText(nItem, nSubItem, lpszText);
-    }
-    else
-    {
-        // заносим новые данные в необходимую колонку удаленного элемента
-        if ((int)it->ColumnsText.size() <= nSubItem)
-            it->ColumnsText.resize(nSubItem + 1);
-        it->ColumnsText[nSubItem] = lpszText;
-
-        if (bIsNeedToRestoreDeletedItem(it))
-            m_DeletedItems.erase(it);
+        SetGroupTask(nGroupID, sCheckGroup);	// Check Group
     }
 
-    return TRUE;
-}
-
-BOOL CListGroupCtrl::SetRowGroupId(int nRow, int nGroupId)
-{
-    //OBS! Rows not assigned to a group will not show in group-view
-    LVITEM lvItem = { 0 };
-    lvItem.mask = LVIF_GROUPID;
-    lvItem.iItem = nRow;
-    lvItem.iSubItem = 0;
-    lvItem.iGroupId = nGroupId;
-    return SetItem(&lvItem);
-}
-
-int CListGroupCtrl::GetRowGroupId(int nRow)
-{
-    LVITEM lvi = { 0 };
-    lvi.mask = LVIF_GROUPID;
-    lvi.iItem = nRow;
-    VERIFY(GetItem(&lvi));
-    return lvi.iGroupId;
+    return Res;
 }
 
 CString CListGroupCtrl::GetGroupHeader(int nGroupId)
@@ -361,52 +667,24 @@ CString CListGroupCtrl::GetGroupHeader(int nGroupId)
 #endif
 }
 
-BOOL CListGroupCtrl::IsGroupStateEnabled()
+int CListGroupCtrl::GetRowGroupId(int nRow)
 {
-    if (!IsGroupViewEnabled())
-        return FALSE;
-
-    if (!IsWindowsVistaOrGreater())
-        return FALSE;
-
-    return TRUE;
+    LVITEM lvi = { 0 };
+    lvi.mask = LVIF_GROUPID;
+    lvi.iItem = nRow;
+    VERIFY(GetItem(&lvi));
+    return lvi.iGroupId;
 }
 
-// Vista SDK - ListView_GetGroupState / LVM_GETGROUPSTATE
-BOOL CListGroupCtrl::HasGroupState(int nGroupId, DWORD dwState)
+BOOL CListGroupCtrl::SetRowGroupId(int nRow, int nGroupId)
 {
-    LVGROUP lg = { 0 };
-    lg.cbSize = sizeof(lg);
-    lg.mask = LVGF_STATE;
-    lg.stateMask = dwState;
-    if (GetGroupInfo(nGroupId, (PLVGROUP)&lg) == -1)
-        return FALSE;
-
-    return lg.state == dwState;
-}
-
-// Vista SDK - ListView_SetGroupState / LVM_SETGROUPINFO
-BOOL CListGroupCtrl::SetGroupState(int nGroupId, DWORD dwState)
-{
-    if (!IsGroupStateEnabled())
-        return FALSE;
-
-    LVGROUP lg = { 0 };
-    lg.cbSize = sizeof(lg);
-    lg.mask = LVGF_STATE;
-    lg.state = dwState;
-    lg.stateMask = dwState;
-
-#ifdef LVGS_COLLAPSIBLE
-    // Maintain LVGS_COLLAPSIBLE state
-    if (HasGroupState(nGroupId, LVGS_COLLAPSIBLE))
-        lg.state |= LVGS_COLLAPSIBLE;
-#endif
-
-    if (SetGroupInfo(nGroupId, (PLVGROUP)&lg) == -1)
-        return FALSE;
-
-    return TRUE;
+    //OBS! Rows not assigned to a group will not show in group-view
+    LVITEM lvItem = { 0 };
+    lvItem.mask = LVIF_GROUPID;
+    lvItem.iItem = nRow;
+    lvItem.iSubItem = 0;
+    lvItem.iGroupId = nGroupId;
+    return SetItem(&lvItem);
 }
 
 int CListGroupCtrl::GroupHitTest(const CPoint& point)
@@ -482,71 +760,6 @@ int CListGroupCtrl::GroupHitTest(const CPoint& point)
     return nGroupId;
 }
 
-void CListGroupCtrl::CheckEntireGroup(int nGroupId, bool bChecked)
-{
-    if (!(GetExtendedStyle() & LVS_EX_CHECKBOXES))
-        return;
-
-    for (int nRow = 0; nRow < GetItemCount(); ++nRow)
-    {
-        if (GetRowGroupId(nRow) == nGroupId)
-        {
-            SetCheck(nRow, bChecked ? TRUE : FALSE);
-        }
-    }
-}
-
-void CListGroupCtrl::ClearSelection()
-{
-    if (const UINT selCount = GetSelectedCount(); selCount != 0)
-    {
-        POSITION pos = GetFirstSelectedItemPosition();
-        for (UINT index = 0; index < selCount; ++index)
-        {
-            SetItemState(GetNextSelectedItem(pos), 0, LVIS_SELECTED);
-        }
-    }
-}
-
-void CListGroupCtrl::SelectItem(int nItem, bool ensureVisible /*= true*/)
-{
-    SetItemState(nItem, LVIS_SELECTED, LVIS_SELECTED);
-    if (ensureVisible)
-        EnsureVisible(nItem, TRUE);
-}
-
-void CListGroupCtrl::GetSelectedList(_Out_ std::vector<int>& selectedItems, _In_opt_ bool bCurrentIndexes /*= false*/) const
-{
-    if (const UINT selCount = GetSelectedCount(); selCount != 0)
-    {
-        selectedItems.resize(selCount);
-
-        POSITION pos = GetFirstSelectedItemPosition();
-        for (UINT index = 0; index < selCount; ++index)
-        {
-            if (bCurrentIndexes)
-                selectedItems[index] = GetNextSelectedItem(pos);
-            else
-                selectedItems[index] = (int)GetItemData(GetNextSelectedItem(pos));
-        }
-    }
-    else
-        selectedItems.clear();
-}
-
-void CListGroupCtrl::DeleteEntireGroup(int nGroupId)
-{
-    for (int nRow = 0; nRow < GetItemCount(); ++nRow)
-    {
-        if (GetRowGroupId(nRow) == nGroupId)
-        {
-            DeleteItem(nRow);
-            nRow--;
-        }
-    }
-    RemoveGroup(nGroupId);
-}
-
 BOOL CListGroupCtrl::GroupByColumn(int nCol)
 {
     if (!IsCommonControlsEnabled())
@@ -614,6 +827,67 @@ BOOL CListGroupCtrl::GroupByColumn(int nCol)
     return FALSE;
 }
 
+void CListGroupCtrl::DeleteEntireGroup(int nGroupId)
+{
+    for (int nRow = 0; nRow < GetItemCount(); ++nRow)
+    {
+        if (GetRowGroupId(nRow) == nGroupId)
+        {
+            DeleteItem(nRow);
+            nRow--;
+        }
+    }
+    RemoveGroup(nGroupId);
+}
+
+// Vista SDK - ListView_GetGroupState / LVM_GETGROUPSTATE
+BOOL CListGroupCtrl::HasGroupState(int nGroupId, DWORD dwState)
+{
+    LVGROUP lg = { 0 };
+    lg.cbSize = sizeof(lg);
+    lg.mask = LVGF_STATE;
+    lg.stateMask = dwState;
+    if (GetGroupInfo(nGroupId, (PLVGROUP)&lg) == -1)
+        return FALSE;
+
+    return lg.state == dwState;
+}
+
+// Vista SDK - ListView_SetGroupState / LVM_SETGROUPINFO
+BOOL CListGroupCtrl::SetGroupState(int nGroupId, DWORD dwState)
+{
+    if (!IsGroupStateEnabled())
+        return FALSE;
+
+    LVGROUP lg = { 0 };
+    lg.cbSize = sizeof(lg);
+    lg.mask = LVGF_STATE;
+    lg.state = dwState;
+    lg.stateMask = dwState;
+
+#ifdef LVGS_COLLAPSIBLE
+    // Maintain LVGS_COLLAPSIBLE state
+    if (HasGroupState(nGroupId, LVGS_COLLAPSIBLE))
+        lg.state |= LVGS_COLLAPSIBLE;
+#endif
+
+    if (SetGroupInfo(nGroupId, (PLVGROUP)&lg) == -1)
+        return FALSE;
+
+    return TRUE;
+}
+
+BOOL CListGroupCtrl::IsGroupStateEnabled()
+{
+    if (!IsGroupViewEnabled())
+        return FALSE;
+
+    if (!IsWindowsVistaOrGreater())
+        return FALSE;
+
+    return TRUE;
+}
+
 void CListGroupCtrl::CollapseAllGroups()
 {
     if (!IsGroupStateEnabled())
@@ -650,252 +924,6 @@ void CListGroupCtrl::ExpandAllGroups()
             }
         }
     }
-}
-
-void CListGroupCtrl::OnContextMenu(CWnd* pWnd, CPoint point)
-{
-    if (pWnd == GetHeaderCtrl())
-    {
-        CPoint pt = point;
-        ScreenToClient(&pt);
-
-        HDHITTESTINFO hdhti = { 0 };
-        hdhti.pt = pt;
-        hdhti.pt.x += GetScrollPos(SB_HORZ);
-        ::SendMessage(GetHeaderCtrl()->GetSafeHwnd(), HDM_HITTEST, 0, (LPARAM)&hdhti);
-        if (hdhti.iItem != -1)
-        {
-            // Retrieve column-title
-            LVCOLUMN lvc = { 0 };
-            lvc.mask = LVCF_TEXT;
-            TCHAR sColText[256] = { 0 };
-            lvc.pszText = sColText;
-            lvc.cchTextMax = sizeof(sColText) - 1;
-            VERIFY(GetColumn(hdhti.iItem, &lvc));
-
-            CMenu menu;
-            const UINT uFlags = MF_BYPOSITION | MF_STRING;
-            VERIFY(menu.CreatePopupMenu());
-            if (GetExtendedStyle() & LVS_EX_CHECKBOXES)
-            {
-                menu.InsertMenu(0, uFlags, 1, sCheckAll);						// Check All
-                menu.InsertMenu(1, uFlags, 2, sUnCheckALL);						// UnCheck All
-                menu.InsertMenu(2, uFlags | MF_SEPARATOR, 3, _T(""));
-            }
-            menu.InsertMenu(3, uFlags, 4, sGroupBy + L": " + lvc.pszText);	// Group by:
-            if (IsGroupViewEnabled())
-                menu.InsertMenu(4, uFlags, 5, sDisableGrouping);			// Disable grouping
-            int nResult = menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD, point.x, point.y, this, 0);
-            switch (nResult)
-            {
-            case 1: CheckElements(true);  break;
-            case 2: CheckElements(false); break;
-            case 4:	GroupByColumn(hdhti.iItem); break;
-            case 5: RemoveAllGroups(); EnableGroupView(FALSE); break;
-            }
-        }
-        return;
-    }
-
-    if (IsGroupViewEnabled())
-    {
-        if (point.x != -1 && point.y != -1)
-        {
-            CMenu menu;
-            const UINT uFlags = MF_BYPOSITION | MF_STRING;
-            VERIFY(menu.CreatePopupMenu());
-
-            CPoint pt = point;
-            ScreenToClient(&pt);
-            int nGroupId = GroupHitTest(pt);
-            if (nGroupId >= 0)
-            {
-                const CString& groupHeader = GetGroupHeader(nGroupId);
-
-                if (IsGroupStateEnabled())
-                {
-                    if (HasGroupState(nGroupId, LVGS_COLLAPSED))
-                    {
-                        const CString menuText = sExpandGroup + L": " + groupHeader;		// Expand group:
-                        menu.InsertMenu(0, uFlags, 1, menuText);
-                    }
-                    else
-                    {
-                        const CString menuText = sCollapseGroup + L": " + groupHeader;	// Collapse group:
-                        menu.InsertMenu(0, uFlags, 2, menuText);
-                    }
-                }
-                CString menuText = sCheckGroup + L": " + groupHeader;	// Check group:
-                menu.InsertMenu(1, uFlags, 3, menuText);
-                menuText = sUnCheckGroup + L": " + groupHeader;			// Uncheck group:
-                menu.InsertMenu(2, uFlags, 4, menuText);
-                menuText = sDeleteGroup + L": " + groupHeader;			// Delete group
-                menu.InsertMenu(3, uFlags, 5, menuText);
-
-                menu.InsertMenu(4, uFlags | MF_SEPARATOR, 6, _T(""));
-            }
-
-            int nRow = HitTest(pt);
-            if (nRow == -1)
-            {
-                if (IsGroupStateEnabled())
-                {
-                    menu.InsertMenu(5, uFlags, 7, sExpandAllGroups);	// Expand all groups
-                    menu.InsertMenu(6, uFlags, 8, sCollapseAllGroups);	// Collapse all groups
-                }
-                menu.InsertMenu(7, uFlags, 9, sDisableGrouping);		// Disable grouping
-            }
-            else
-            {
-                nGroupId = GetRowGroupId(nRow);
-                if (IsGroupStateEnabled())
-                {
-                    const CString& groupHeader = GetGroupHeader(nGroupId);
-
-                    if (HasGroupState(nGroupId, LVGS_COLLAPSED))
-                    {
-                        const CString menuText = sExpandGroup + L": " + groupHeader;		// Expand group:
-                        menu.InsertMenu(0, uFlags, 1, menuText);
-                    }
-                    else
-                    {
-                        const CString menuText = sCollapseGroup + L": " + groupHeader;	// Collapse group:
-                        menu.InsertMenu(0, uFlags, 2, menuText);
-                    }
-                }
-            }
-
-            const int nResult = menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD, point.x, point.y, this, 0);
-            switch (nResult)
-            {
-            case 1: SetGroupState(nGroupId, LVGS_NORMAL); break;
-            case 2: SetGroupState(nGroupId, LVGS_COLLAPSED); break;
-            case 3: CheckEntireGroup(nGroupId, true); break;
-            case 4: CheckEntireGroup(nGroupId, false); break;
-            case 5: DeleteEntireGroup(nGroupId); break;
-            case 7: ExpandAllGroups(); break;
-            case 8: CollapseAllGroups(); break;
-            case 9: RemoveAllGroups(); EnableGroupView(FALSE); break;
-            }
-        }
-    }
-}
-
-namespace {
-struct PARAMSORT
-{
-    CListCtrl* m_control;
-    int  m_ColumnIndex;
-    CListGroupCtrl::SortType m_sortType;
-    CSimpleMap<int, CString> m_GroupNames;
-    std::function<int(CString, CString)> m_SortFunction;
-
-    explicit PARAMSORT(CListCtrl* control, int nCol, CListGroupCtrl::SortType sortType,
-                       const std::function<int(CString, CString)>& sortFunc = _tcscmp)
-        : m_control(control)
-        , m_ColumnIndex(nCol)
-        , m_sortType(sortType)
-        , m_SortFunction(sortFunc)
-    {}
-
-    const CString& LookupGroupName(int nGroupId)
-    {
-        const int groupIdx = m_GroupNames.FindKey(nGroupId);
-        if (groupIdx == -1)
-        {
-            static const CString emptyStr;
-            return emptyStr;
-        }
-        return m_GroupNames.GetValueAt(groupIdx);
-    }
-};
-
-// Comparison extracts values from the List-Control
-int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
-{
-    PARAMSORT* ps = (PARAMSORT*)lParamSort;
-
-    TCHAR left[256] = _T(""), right[256] = _T("");
-    ListView_GetItemText(ps->m_control->m_hWnd, lParam1, ps->m_ColumnIndex, left, sizeof(left));
-    ListView_GetItemText(ps->m_control->m_hWnd, lParam2, ps->m_ColumnIndex, right, sizeof(right));
-
-    switch (ps->m_sortType)
-    {
-    default:
-        return ps->m_control->GetItemData((int)lParam1) < ps->m_control->GetItemData((int)lParam2);
-    case CListGroupCtrl::SortType::eAscending:
-        return ps->m_SortFunction(left, right);
-    case CListGroupCtrl::SortType::eDescending:
-        return ps->m_SortFunction(right, left);
-    }
-}
-
-int CALLBACK SortFuncGroup(int nLeftId, int nRightId, void* lParamSort)
-{
-    PARAMSORT* ps = (PARAMSORT*)lParamSort;
-
-    const CString& left = ps->LookupGroupName(nLeftId);
-    const CString& right = ps->LookupGroupName(nRightId);
-
-    if (ps->m_sortType != CListGroupCtrl::SortType::eDescending)
-        return _tcscmp(left, right);
-    else
-        return _tcscmp(right, left);
-}
-}
-
-bool CListGroupCtrl::SortColumn(int columnIndex, SortType sortType)
-{
-    m_SortCol = columnIndex;
-    m_sortType = sortType;
-
-    CWaitCursor waitCursor;
-
-    const auto it = std::find_if(m_SortFunct.begin(), m_SortFunct.end(),
-                                 [&columnIndex](const std::pair<int, std::function<int(CString, CString)>>& Element)
-                                 {
-                                     return Element.first == columnIndex;
-                                 });
-
-    PARAMSORT paramSort(this, columnIndex, sortType);
-
-    if (it != std::end(m_SortFunct))
-        paramSort.m_SortFunction = it->second;
-    else
-        paramSort.m_SortFunction = _tcscmp;
-
-    if (IsGroupViewEnabled())
-    {
-        SetRedraw(FALSE);
-
-        if (m_ChangeGroupsWhileSort)
-            GroupByColumn(columnIndex);
-
-        // Cannot use GetGroupInfo during sort
-        for (int nRow = 0; nRow < GetItemCount(); ++nRow)
-        {
-            int nGroupId = GetRowGroupId(nRow);
-            if (nGroupId != -1 && paramSort.m_GroupNames.FindKey(nGroupId) == -1)
-                paramSort.m_GroupNames.Add(nGroupId, GetGroupHeader(nGroupId));
-        }
-
-        SetRedraw(TRUE);
-        Invalidate(FALSE);
-
-        // Avoid bug in CListCtrl::SortGroups() which differs from ListView_SortGroups
-        if (!ListView_SortGroups(m_hWnd, SortFuncGroup, &paramSort))
-            return false;
-
-        // СОРТИРУЕМ ЭЛЕМЕНТЫ ПО УМОЛЧАНИЮ
-        ListView_SortItemsEx(m_hWnd, SortFunc, &paramSort);
-    }
-    else
-    {
-        ListView_SortItemsEx(m_hWnd, SortFunc, &paramSort);
-    }
-
-    SetSortArrow(m_SortCol, m_sortType);
-    return true;
 }
 
 BOOL CListGroupCtrl::SetGroupFooter(int nGroupID, const CString& footer, DWORD dwAlign /*= LVGA_FOOTER_CENTER*/)
@@ -1032,6 +1060,259 @@ BOOL CListGroupCtrl::SetGroupTitleImage(int nGroupID, int nImage, const CString&
 #else
     return FALSE;
 #endif
+}
+
+void CListGroupCtrl::OnContextMenu(CWnd* pWnd, CPoint point)
+{
+    if (pWnd == GetHeaderCtrl())
+    {
+        CPoint pt = point;
+        ScreenToClient(&pt);
+
+        HDHITTESTINFO hdhti = { 0 };
+        hdhti.pt = pt;
+        hdhti.pt.x += GetScrollPos(SB_HORZ);
+        ::SendMessage(GetHeaderCtrl()->GetSafeHwnd(), HDM_HITTEST, 0, (LPARAM)&hdhti);
+        if (hdhti.iItem != -1)
+        {
+            // Retrieve column-title
+            LVCOLUMN lvc = { 0 };
+            lvc.mask = LVCF_TEXT;
+            TCHAR sColText[256] = { 0 };
+            lvc.pszText = sColText;
+            lvc.cchTextMax = sizeof(sColText) - 1;
+            VERIFY(GetColumn(hdhti.iItem, &lvc));
+
+            CMenu menu;
+            const UINT uFlags = MF_BYPOSITION | MF_STRING;
+            VERIFY(menu.CreatePopupMenu());
+            if (GetExtendedStyle() & LVS_EX_CHECKBOXES)
+            {
+                menu.InsertMenu(0, uFlags, 1, sCheckAll);						// Check All
+                menu.InsertMenu(1, uFlags, 2, sUnCheckALL);						// UnCheck All
+                menu.InsertMenu(2, uFlags | MF_SEPARATOR, 3, _T(""));
+            }
+            menu.InsertMenu(3, uFlags, 4, sGroupBy + L": " + lvc.pszText);	// Group by:
+            if (IsGroupViewEnabled())
+                menu.InsertMenu(4, uFlags, 5, sDisableGrouping);			// Disable grouping
+            int nResult = menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD, point.x, point.y, this, 0);
+            switch (nResult)
+            {
+            case 1: CheckElements(true);  break;
+            case 2: CheckElements(false); break;
+            case 4:	GroupByColumn(hdhti.iItem); break;
+            case 5: RemoveAllGroups(); EnableGroupView(FALSE); break;
+            }
+        }
+        return;
+    }
+
+    if (IsGroupViewEnabled())
+    {
+        if (point.x != -1 && point.y != -1)
+        {
+            CMenu menu;
+            const UINT uFlags = MF_BYPOSITION | MF_STRING;
+            VERIFY(menu.CreatePopupMenu());
+
+            CPoint pt = point;
+            ScreenToClient(&pt);
+            int nGroupId = GroupHitTest(pt);
+            if (nGroupId >= 0)
+            {
+                const CString& groupHeader = GetGroupHeader(nGroupId);
+
+                if (IsGroupStateEnabled())
+                {
+                    if (HasGroupState(nGroupId, LVGS_COLLAPSED))
+                    {
+                        const CString menuText = sExpandGroup + L": " + groupHeader;		// Expand group:
+                        menu.InsertMenu(0, uFlags, 1, menuText);
+                    }
+                    else
+                    {
+                        const CString menuText = sCollapseGroup + L": " + groupHeader;	// Collapse group:
+                        menu.InsertMenu(0, uFlags, 2, menuText);
+                    }
+                }
+                CString menuText = sCheckGroup + L": " + groupHeader;	// Check group:
+                menu.InsertMenu(1, uFlags, 3, menuText);
+                menuText = sUnCheckGroup + L": " + groupHeader;			// Uncheck group:
+                menu.InsertMenu(2, uFlags, 4, menuText);
+                menuText = sDeleteGroup + L": " + groupHeader;			// Delete group
+                menu.InsertMenu(3, uFlags, 5, menuText);
+
+                menu.InsertMenu(4, uFlags | MF_SEPARATOR, 6, _T(""));
+            }
+
+            int nRow = HitTest(pt);
+            if (nRow == -1)
+            {
+                if (IsGroupStateEnabled())
+                {
+                    menu.InsertMenu(5, uFlags, 7, sExpandAllGroups);	// Expand all groups
+                    menu.InsertMenu(6, uFlags, 8, sCollapseAllGroups);	// Collapse all groups
+                }
+                menu.InsertMenu(7, uFlags, 9, sDisableGrouping);		// Disable grouping
+            }
+            else
+            {
+                nGroupId = GetRowGroupId(nRow);
+                if (IsGroupStateEnabled())
+                {
+                    const CString& groupHeader = GetGroupHeader(nGroupId);
+
+                    if (HasGroupState(nGroupId, LVGS_COLLAPSED))
+                    {
+                        const CString menuText = sExpandGroup + L": " + groupHeader;		// Expand group:
+                        menu.InsertMenu(0, uFlags, 1, menuText);
+                    }
+                    else
+                    {
+                        const CString menuText = sCollapseGroup + L": " + groupHeader;	// Collapse group:
+                        menu.InsertMenu(0, uFlags, 2, menuText);
+                    }
+                }
+            }
+
+            const int nResult = menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RETURNCMD, point.x, point.y, this, 0);
+            switch (nResult)
+            {
+            case 1: SetGroupState(nGroupId, LVGS_NORMAL); break;
+            case 2: SetGroupState(nGroupId, LVGS_COLLAPSED); break;
+            case 3: CheckEntireGroup(nGroupId, true); break;
+            case 4: CheckEntireGroup(nGroupId, false); break;
+            case 5: DeleteEntireGroup(nGroupId); break;
+            case 7: ExpandAllGroups(); break;
+            case 8: CollapseAllGroups(); break;
+            case 9: RemoveAllGroups(); EnableGroupView(FALSE); break;
+            }
+        }
+    }
+}
+
+namespace {
+struct PARAMSORT
+{
+    CListGroupCtrl* m_control;
+    int  m_ColumnIndex;
+    CListGroupCtrl::SortType m_sortType;
+    CSimpleMap<int, CString> m_GroupNames;
+    std::function<int(CString, CString)> m_SortFunction;
+
+    explicit PARAMSORT(CListGroupCtrl* control, int nCol, CListGroupCtrl::SortType sortType,
+                       const std::function<int(CString, CString)>& sortFunc = _tcscmp)
+        : m_control(control)
+        , m_ColumnIndex(nCol)
+        , m_sortType(sortType)
+        , m_SortFunction(sortFunc)
+    {}
+
+    const CString& LookupGroupName(int nGroupId)
+    {
+        const int groupIdx = m_GroupNames.FindKey(nGroupId);
+        if (groupIdx == -1)
+        {
+            static const CString emptyStr;
+            return emptyStr;
+        }
+        return m_GroupNames.GetValueAt(groupIdx);
+    }
+};
+
+// Comparison extracts values from the List-Control
+int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+{
+    PARAMSORT* ps = (PARAMSORT*)lParamSort;
+
+    if (ps->m_sortType != CListGroupCtrl::SortType::eAscending &&
+        ps->m_sortType != CListGroupCtrl::SortType::eDescending)
+    {
+        return ps->m_control->GetDefaultItemIndex((int)lParam1) < ps->m_control->GetDefaultItemIndex((int)lParam2);
+    }
+
+    TCHAR left[256] = _T(""), right[256] = _T("");
+    ListView_GetItemText(ps->m_control->m_hWnd, lParam1, ps->m_ColumnIndex, left, sizeof(left));
+    ListView_GetItemText(ps->m_control->m_hWnd, lParam2, ps->m_ColumnIndex, right, sizeof(right));
+
+    switch (ps->m_sortType)
+    {
+    case CListGroupCtrl::SortType::eAscending:
+        return ps->m_SortFunction(left, right);
+    case CListGroupCtrl::SortType::eDescending:
+        return ps->m_SortFunction(right, left);
+    default:
+        ASSERT(false);
+        return 0;
+    }
+}
+
+int CALLBACK SortFuncGroup(int nLeftId, int nRightId, void* lParamSort)
+{
+    PARAMSORT* ps = (PARAMSORT*)lParamSort;
+
+    const CString& left = ps->LookupGroupName(nLeftId);
+    const CString& right = ps->LookupGroupName(nRightId);
+
+    if (ps->m_sortType != CListGroupCtrl::SortType::eDescending)
+        return _tcscmp(left, right);
+    else
+        return _tcscmp(right, left);
+}
+}
+
+bool CListGroupCtrl::SortColumn(int columnIndex, SortType sortType)
+{
+    m_SortCol = columnIndex;
+    m_sortType = sortType;
+
+    CWaitCursor waitCursor;
+
+    const auto it = std::find_if(m_SortFunct.begin(), m_SortFunct.end(),
+                                 [&columnIndex](const std::pair<int, std::function<int(CString, CString)>>& Element)
+                                 {
+                                     return Element.first == columnIndex;
+                                 });
+
+    PARAMSORT paramSort(this, columnIndex, sortType);
+
+    if (it != std::end(m_SortFunct))
+        paramSort.m_SortFunction = it->second;
+    else
+        paramSort.m_SortFunction = _tcscmp;
+
+    if (IsGroupViewEnabled())
+    {
+        SetRedraw(FALSE);
+
+        if (m_ChangeGroupsWhileSort)
+            GroupByColumn(columnIndex);
+
+        // Cannot use GetGroupInfo during sort
+        for (int nRow = 0; nRow < GetItemCount(); ++nRow)
+        {
+            int nGroupId = GetRowGroupId(nRow);
+            if (nGroupId != -1 && paramSort.m_GroupNames.FindKey(nGroupId) == -1)
+                paramSort.m_GroupNames.Add(nGroupId, GetGroupHeader(nGroupId));
+        }
+
+        SetRedraw(TRUE);
+        Invalidate(FALSE);
+
+        // Avoid bug in CListCtrl::SortGroups() which differs from ListView_SortGroups
+        if (!ListView_SortGroups(m_hWnd, SortFuncGroup, &paramSort))
+            return false;
+
+        // СОРТИРУЕМ ЭЛЕМЕНТЫ ПО УМОЛЧАНИЮ
+        ListView_SortItemsEx(m_hWnd, SortFunc, &paramSort);
+    }
+    else
+    {
+        ListView_SortItemsEx(m_hWnd, SortFunc, &paramSort);
+    }
+
+    SetSortArrow(m_SortCol, m_sortType);
+    return true;
 }
 
 BOOL CListGroupCtrl::OnGroupTaskClick(NMHDR* pNMHDR, LRESULT* /*pResult*/)
@@ -1252,103 +1533,6 @@ void CListGroupCtrl::PreSubclassWindow()
     CListCtrl::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
 }
 
-BOOL CListGroupCtrl::ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags /*= 0*/)
-{
-    SetExtendedStyle(GetExtendedStyle() | dwAdd);
-
-    if (dwAdd & LVS_EX_CHECKBOXES)
-    {
-        const HWND header = *GetHeaderCtrl();
-        DWORD dwHeaderStyle = ::GetWindowLong(header, GWL_STYLE);
-        dwHeaderStyle |= HDS_CHECKBOXES;
-        ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
-    }
-
-    return CListCtrl::ModifyStyle(dwRemove, 0, nFlags);
-}
-
-void CListGroupCtrl::AutoScaleColumns()
-{
-    const int CountColumns = GetHeaderCtrl()->GetItemCount();
-    if (CountColumns != 0)
-    {
-        CRect Rect;
-        GetClientRect(Rect);
-
-        const int Width = Rect.Width() / CountColumns;
-        for (int Column = 0; Column < CountColumns; Column++)
-            CListCtrl::SetColumnWidth(Column, Width);
-    }
-}
-
-void CListGroupCtrl::FitToContentColumn(int nCol, bool bIncludeHeaderContent)
-{
-    const int flag = bIncludeHeaderContent ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE;
-    ListView_SetColumnWidth(m_hWnd, nCol, flag);
-}
-
-void CListGroupCtrl::FindItems(_In_ CString sFindString)
-{
-    FindItems(std::list<CString>{ std::move(sFindString) });
-}
-
-void CListGroupCtrl::FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll /*= false*/)
-{
-    m_sFindStrings = sFindStrings;
-    m_bMatchAll = bMatchAll;
-
-    // сортируем данные в массиве чтобы последовательно их загрузить в контрол
-    m_DeletedItems.sort([](const DeletedItemsInfo& Item1, const DeletedItemsInfo& Item2) -> bool
-                        {
-                            return Item1.ItemData.iItem < Item2.ItemData.iItem;
-                        });
-
-    // восстанавливаем список удаленных элементов m_DeletedItems
-    for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end();)
-    {
-        if (bIsNeedToRestoreDeletedItem(it))
-            it = m_DeletedItems.erase(it);
-        else
-            ++it;
-    }
-
-    int nTotalColumns = GetHeaderCtrl()->GetItemCount();
-    // проходим по всем элементам и удаляем те, которые не попали под критерии поиска
-    for (int Row = CListCtrl::GetItemCount() - 1; Row >= 0; Row--)
-    {
-        // флаг того, что в строчке есть элементы удовлетворяющие поиску
-        bool bFind = bMatchAll;
-        for (auto&& it : sFindStrings)
-        {
-            if (bMatchAll)// првоеряем что строчка таблицы должна совпадать со всеми элементами вектора
-                bFind &= FindItemInTable(std::move(it), Row);
-            else // првоеряем что строчка таблицы должна совпадать хотябы с одним элементом вектора
-                bFind |= FindItemInTable(std::move(it), Row);
-        }
-
-        // если строчка не совпала с существующими, то удаляем ее
-        if (!bFind)
-        {
-            LVITEM lvi = { 0 };
-            lvi.mask = LVIF_GROUPID | TVIF_PARAM | LVIF_STATE | LVIF_TEXT;
-            lvi.stateMask = LVIS_STATEIMAGEMASK;
-            lvi.iItem = Row;
-            CListCtrl::GetItem(&lvi);
-
-            m_DeletedItems.push_back({ CListCtrl::GetCheck(Row), lvi });
-            m_DeletedItems.back().ColumnsText.resize(nTotalColumns);
-            for (auto Column = 0; Column < nTotalColumns; ++Column)
-            {
-                m_DeletedItems.back().ColumnsText[Column] = CListCtrl::GetItemText(Row, Column);
-            }
-
-            CListCtrl::DeleteItem(Row);
-        }
-    }
-
-    Resort();
-}
-
 bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive /*= false*/)
 {
     const unsigned nTotalRows = CListCtrl::GetItemCount();
@@ -1375,20 +1559,20 @@ bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned 
 
 // BOOL CListGroupCtrl::GetDefaultItemCheck(_In_ int nRow)
 // {
-// 	if (GetItemData(nRow) == nRow)
+// 	if (GetItemRealIndex(nRow) == nRow)
 // 		return CListCtrl::GetCheck(nRow);
 //
 // 	// ищем по отображаемым данным, есть ли там запрашиваемый жлемент
 // 	for (int Row = 0, nItemsCount = CListCtrl::GetItemCount(); Row < nItemsCount; ++Row)
 // 	{
-// 		if (GetItemData(Row) == nRow)
+// 		if (GetItemRealIndex(Row) == nRow)
 // 			return CListCtrl::GetCheck(Row);
 // 	}
 //
 // 	// ищем по удаленным элементам
 // 	for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end();)
 // 	{
-// 		if (it->ItemData.lParam == nRow)
+// 		if (((ListItemData*)it->ItemData.lParam)->defaultItemIndex == nRow)
 // 			return it->bChecked;
 // 	}
 //
@@ -1401,14 +1585,14 @@ bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned 
 // 	// ищем по отображаемым данным, есть ли там запрашиваемый жлемент
 // 	for (int Row = 0, nItemsCount = CListCtrl::GetItemCount(); Row < nItemsCount; ++Row)
 // 	{
-// 		if (GetItemData(Row) == nItem)
+// 		if (GetItemRealIndex(Row) == nItem)
 // 			return CListCtrl::SetItemText(Row, nSubItem, lpszText);
 // 	}
 //
 // 	// ищем по удаленным элементам
 // 	for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end();)
 // 	{
-// 		if (it->ItemData.lParam == nItem)
+// 		if (((ListItemData*)it->ItemData.lParam)->defaultItemIndex == nItem)
 // 		{
 // 			if ((int)it->ColumnsText.size() > nSubItem)
 // 			{
@@ -1416,46 +1600,12 @@ bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned 
 // 				return TRUE;
 // 			}
 // 			else
-// 				break;;
+// 				break;
 // 		}
 // 	}
 //
 // 	return CListCtrl::SetItemText(nItem, nSubItem, lpszText);
 // }
-
-int CListGroupCtrl::GetCurrentRowIndex(_In_ int nRow)
-{
-    // ищем по отображаемым данным, есть ли там запрашиваемый жлемент
-    for (int Row = 0, nItemsCount = CListCtrl::GetItemCount(); Row < nItemsCount; ++Row)
-    {
-        if ((int)GetItemData(Row) == nRow)
-            return Row;
-    }
-
-    // ищем по удаленным элементам
-    for (const auto& item : m_DeletedItems)
-    {
-        if (item.ItemData.lParam == nRow)
-            return item.ItemData.iItem;
-    }
-
-    return nRow;
-}
-
-int CListGroupCtrl::GetDefaultRowIndex(_In_ int nRow)
-{
-    return (int)GetItemData(nRow);
-}
-
-void CListGroupCtrl::CheckAllElements(bool bChecked)
-{
-    for (auto it = m_DeletedItems.begin(); it != m_DeletedItems.end(); ++it)
-    {
-        it->bChecked = bChecked;
-    }
-
-    CheckElements(bChecked);
-}
 
 void CListGroupCtrl::CheckElements(bool bChecked)
 {
@@ -1474,45 +1624,6 @@ void CListGroupCtrl::CheckElements(bool bChecked)
     else
         hdi.fmt &= ~HDF_CHECKED;
     Header_SetItem(*header, 0, &hdi);
-}
-
-void CListGroupCtrl::GetCheckedList(_Out_ std::vector<int>& CheckedList, _In_opt_ bool bCurrentIndexes /*= false*/) const
-{
-    CheckedList.clear();
-    const int nItemsCount = CListCtrl::GetItemCount();
-
-    if (bCurrentIndexes)
-    {
-        CheckedList.reserve(nItemsCount);
-
-        for (int Row = 0; Row < nItemsCount; ++Row)
-        {
-            if (GetCheck(Row) != BST_UNCHECKED)
-                CheckedList.push_back(Row);
-        }
-    }
-    else
-    {
-        CheckedList.reserve(nItemsCount + m_DeletedItems.size());
-
-        for (int Row = 0; Row < nItemsCount; ++Row)
-        {
-            if (GetCheck(Row) != BST_UNCHECKED)
-                CheckedList.push_back((int)GetItemData(Row));
-        }
-
-        for (const auto& it : m_DeletedItems)
-        {
-            if (it.bChecked)
-                CheckedList.push_back((int)it.ItemData.lParam);
-        }
-    }
-}
-
-BOOL CListGroupCtrl::DeleteAllItems()
-{
-    m_DeletedItems.clear();
-    return CListCtrl::DeleteAllItems();
 }
 
 BOOL CListGroupCtrl::OnHdnItemStateIconClick(UINT,NMHDR* pNMHDR, LRESULT* pResult)
@@ -1689,4 +1800,10 @@ bool CListGroupCtrl::bIsNeedToRestoreDeletedItem(std::list<DeletedItemsInfo>::it
     }
 
     return bDelete;
+}
+
+void CListGroupCtrl::OnDestroy()
+{
+    DeleteAllItems();
+    CListCtrl::OnDestroy();
 }
