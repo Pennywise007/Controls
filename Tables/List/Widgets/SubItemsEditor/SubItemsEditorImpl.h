@@ -13,7 +13,7 @@ class IEditSubItemWindow : public CDialogEx
 public:
     // фабричный метод созданий окна для редактирования текста
     static std::unique_ptr<IEditSubItemWindow> createWindow(
-        const CRect& rect, const LVSubItemParams::Ptr& subitemParams);
+        CWnd* parent, const CRect& rect, const LVSubItemParams::Ptr& subitemParams);
 
 public:
     // устанавливаем внутренний контрол использующийся для редактирования
@@ -158,7 +158,7 @@ void SubItemsEditor<CBaseList>::EditItem(int item, int subItem)
     const LVSubItemParams::Ptr params = std::make_shared<LVSubItemParams>(item, subItem, lvi.iGroupId);
 
     // создаем окно редактирования сообщения
-    m_editSubItemWindow = IEditSubItemWindow::createWindow(htItemRect, params);
+    m_editSubItemWindow = IEditSubItemWindow::createWindow(this, htItemRect, params);
     if (!::IsWindow(m_editSubItemWindow->m_hWnd))
     {
         assert(false);

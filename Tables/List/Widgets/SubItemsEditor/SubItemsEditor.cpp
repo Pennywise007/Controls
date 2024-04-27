@@ -12,7 +12,7 @@ namespace controls::list::widgets {
 class CSubItemEditorWindow : public IEditSubItemWindow
 {
 public:
-    CSubItemEditorWindow(const CRect& rect, const LVSubItemParams::Ptr& subitemParams);
+    CSubItemEditorWindow(CWnd* parent, const CRect& rect, const LVSubItemParams::Ptr& subitemParams);
 
 // IEditSubItemWindow
 public:
@@ -34,7 +34,7 @@ protected:
 
 private:
     // создаем окно
-    void createWindow(const CRect& rect);
+    void createWindow(CWnd* parent, const CRect& rect);
 
 private:
     // вставляемый в окно контрол
@@ -45,9 +45,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 // создаем окно для редактирвоания ячейки списка
 std::unique_ptr<IEditSubItemWindow> IEditSubItemWindow::createWindow(
-    const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
+    CWnd* parent, const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
 {
-    return std::make_unique<CSubItemEditorWindow>(rect, subItemParams);
+    return std::make_unique<CSubItemEditorWindow>(parent, rect, subItemParams);
 }
 
 BEGIN_MESSAGE_MAP(CSubItemEditorWindow, CDialogEx)
@@ -56,7 +56,7 @@ BEGIN_MESSAGE_MAP(CSubItemEditorWindow, CDialogEx)
 END_MESSAGE_MAP()
 
 //----------------------------------------------------------------------------//
-CSubItemEditorWindow::CSubItemEditorWindow(const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
+CSubItemEditorWindow::CSubItemEditorWindow(CWnd* parent, const CRect& rect, const LVSubItemParams::Ptr& subItemParams)
     : m_subItemParams(subItemParams)
 {
     HINSTANCE instance = AfxGetInstanceHandle();
@@ -78,17 +78,17 @@ CSubItemEditorWindow::CSubItemEditorWindow(const CRect& rect, const LVSubItemPar
     }
 
     // создаем окно
-    createWindow(rect);
+    createWindow(parent, rect);
 }
 
 //----------------------------------------------------------------------------//
-void CSubItemEditorWindow::createWindow(const CRect& rect)
+void CSubItemEditorWindow::createWindow(CWnd* parent, const CRect& rect)
 {
     // создаем окно
     if (CDialogEx::CreateEx(0, CString(typeid(*this).name()), L"",
-                            0,
+                            WS_CLIPCHILDREN,
                             0, 0, 0, 0,
-                            NULL, nullptr, nullptr) == FALSE)
+                            parent->m_hWnd, nullptr, nullptr) == FALSE)
     {
         assert(false);
         return;
