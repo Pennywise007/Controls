@@ -173,6 +173,7 @@ void SubItemsEditor<CBaseList>::EditItem(int item, int subItem)
                                               params.get());
     if (!editorControl || !::IsWindow(editorControl->m_hWnd))
     {
+        m_editSubItemWindow->DestroyWindow();
         m_editSubItemWindow.reset();
         return;
     }
@@ -246,8 +247,7 @@ afx_msg void SubItemsEditor<CBaseList>::OnLButtonDblClk(UINT nFlags, CPoint poin
 
 //----------------------------------------------------------------------------//
 template <typename CBaseList>
-afx_msg LRESULT SubItemsEditor<CBaseList>::OnEndEditSubItem(WPARAM wParam,
-                                                               LPARAM /*lParam*/)
+afx_msg LRESULT SubItemsEditor<CBaseList>::OnEndEditSubItem(WPARAM wParam, LPARAM /*lParam*/)
 {
     // во время закрытия окна после OnOk или OnCancel может придти оповещение ещё раз из OnActivate
     // по-этому берем наше окно на промежуточный смарт поинтер и выходим если окна уже нет
