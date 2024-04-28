@@ -1,76 +1,54 @@
 ﻿#pragma once
 #include <afxwin.h>
 #include <map>
+#include <optional>
 
 ////////////////////////////////////////////////////////////////////////////////
-// вспомогательный интерфейс сохранения выделения в комбобоксе
-interface ISelectionSaver
-{
-    virtual ~ISelectionSaver() = default;
-
-    // получает текущее выделение
-    virtual int  getRealCurSel() = 0;
-    // устанавливает текущее выделение
-    virtual void setRealCurSel(int selection) = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class ComboWithSearch :
-    public CComboBox,
-    public ISelectionSaver
+class ComboWithSearch : public CComboBox
 {
     typedef CComboBox BaseCtrl;
 public:
     ComboWithSearch() = default;
+
+    void SetWindowText(const CString& text);
+    // Resize combobox dropdown size to fit it's content
+    void AdjustComboBoxToContent();
+    // Allows control to have its own text(not one of the inserted items)
+    void AllowCustomText(bool allow = true);
+
+private:
+    void executeSearch();
+    bool resetSearch();
+    // Updating real selection(among all items) from currently selected item
+    void updateRealCurSelFromCurrent();
+
+private: // функции конвертации индексов
+    // из текущего индекса в реальный индекс
+    int convertToRealIndex(int index);
+    // из реального индекса в текущий
+    int convertFromRealIndex(int index);
 
 protected:
     DECLARE_MESSAGE_MAP();
 
     // for processing Windows messages
     virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
-
-// ISelectionSaver
-public:
-    // получает текущее выделение
-    int  getRealCurSel() override;
-    // устанавливает текущее выделение
-    void setRealCurSel(int selection) override;
-
-public:
-    // сообщение об изменении текста
-    BOOL OnCbnEditchange();
-    // сообщение о выборе текущего элемента
-    BOOL OnCbnSelendok();
-    // сообщение об отмене выбора
-    BOOL OnCbnSelendcancel();
-    // оповещение о убирании фокуса с контроа
-    BOOL OnCbnKillfocus();
-    // таймер
+    afx_msg BOOL OnCbnEditchange();
+    afx_msg BOOL OnCbnSelendok();
+    afx_msg BOOL OnCbnSelendcancel();
     afx_msg void OnTimer(UINT_PTR nIDEvent);
-    // нажатие клавиш
-    afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
 
 private:
-    // выполняем поиск
-    void executeSearch();
-    // сбрасываем фильтр
-    bool resetSearch();
-    // обновляем текущий реально выделенный элемент
-    void updateRealCurSelFromCurrent();
-    // регулируем выпадающий список к контенту комбобокса
-    void adjustComboBoxToContent();
-
-private:    // функции конвертации индексов
-    // из текущего индекса в реальный индекс
-    int convertToRealIndex(int index);
-    // из реального индекса в текущий
-    int convertFromRealIndex(int index);
-
-private:
-    // отфильтрованные строки
-    //      индекс | текст
+    // filtered items
+    //      item | text
     std::map<int, std::wstring> m_filteredItems;
 
-    // реальное значение выделенного элемента, с учетом удаленных строк
-    int m_realSel = -1;
+    // If true doesn't force control to have any of the items values
+    bool m_allowCustomText = false;
+    // Current control item selected by user in non m_allowCustomText mode
+    int m_selectedItemIndex;
+    // Current control text selected by user in m_allowCustomText mode
+    std::optional<CString> m_selectedCustomText;
+    // Flag that we hiding dropdown window from internal functions
+    bool m_internalHidingDropdown = false;
 };

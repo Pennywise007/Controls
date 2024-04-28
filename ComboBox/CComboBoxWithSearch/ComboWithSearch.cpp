@@ -7,34 +7,152 @@
 ////////////////////////////////////////////////////////////////////////////////
 // константы
 // идентификатор таймера подбора
-const UINT_PTR kTextChangeTimerId = 0;
+constexpr UINT_PTR kTextChangeTimerId = 0;
 
 // время через которое должен сработать таймер подбора, мс
-const UINT kSearchTime = 200;
+constexpr UINT kSearchTime = 200;
 
 BEGIN_MESSAGE_MAP(ComboWithSearch, CComboBox)
-    ON_CONTROL_REFLECT_EX(CBN_KILLFOCUS,       &ComboWithSearch::OnCbnKillfocus)
     ON_CONTROL_REFLECT_EX(CBN_SELENDOK,        &ComboWithSearch::OnCbnSelendok)
     ON_CONTROL_REFLECT_EX(CBN_SELENDCANCEL,    &ComboWithSearch::OnCbnSelendcancel)
     ON_CONTROL_REFLECT_EX(CBN_EDITCHANGE,      &ComboWithSearch::OnCbnEditchange)
     ON_WM_TIMER()
-    ON_WM_KEYDOWN()
 END_MESSAGE_MAP()
 
-////////////////////////////////////////////////////////////////////////////////
-// класс сохраняющий текущий выделенный элемент
-class CurSelSaver
+//----------------------------------------------------------------------------//
+void ComboWithSearch::SetWindowText(const CString& text)
 {
-public:
-    CurSelSaver(ISelectionSaver* pSaverClass);
-    ~CurSelSaver();
+    int item = FindStringExact(0, text);
+    BaseCtrl::SetCurSel(item);
+    BaseCtrl::SetWindowText(text);
+}
 
-private:
-    // указатель на класс с комбобоксом
-    ISelectionSaver* m_saverClass;
-    // сохраненное выделение
-    int m_savedRealSel;
-};
+//----------------------------------------------------------------------------//
+void ComboWithSearch::AdjustComboBoxToContent()
+{
+    if (!BaseCtrl::GetSafeHwnd() || !::IsWindow(BaseCtrl::GetSafeHwnd()))
+    {
+        ASSERT(FALSE);
+        return;
+    }
+
+    // Make sure the drop rect for this combobox is at least tall enough to
+    // show 3 items in the dropdown list.
+    int nHeight = 0;
+    int nItemsToShow = std::min<int>(GetMinVisible(), BaseCtrl::GetCount());
+
+    for (int i = 0; i < nItemsToShow; i++)
+    {
+        int nItemH = BaseCtrl::GetItemHeight(i);
+        nHeight += nItemH;
+    }
+
+    nHeight += (4 * ::GetSystemMetrics(SM_CYEDGE));
+
+    // Set the height if necessary -- save current size first
+    COMBOBOXINFO cmbxInfo;
+    cmbxInfo.cbSize = sizeof(COMBOBOXINFO);
+    if (BaseCtrl::GetComboBoxInfo(&cmbxInfo))
+    {
+        CRect rcListBox;
+        ::GetWindowRect(cmbxInfo.hwndList, &rcListBox);
+
+        if (rcListBox.Height() != nHeight)
+            ::SetWindowPos(cmbxInfo.hwndList, 0, 0, 0, rcListBox.Width(),
+                           nHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_NOSENDCHANGING);
+    }
+}
+
+//----------------------------------------------------------------------------//
+void ComboWithSearch::AllowCustomText(bool allow)
+{
+    m_allowCustomText = allow;
+    m_selectedCustomText.reset();
+}
+
+//----------------------------------------------------------------------------//
+BOOL ComboWithSearch::OnCbnSelendok()
+{
+    if (m_allowCustomText)
+    {
+        m_selectedCustomText.emplace();
+        if (int currentSel = BaseCtrl::GetCurSel(); currentSel != -1)
+            GetLBText(currentSel, m_selectedCustomText.value());
+        else
+            GetWindowText(m_selectedCustomText.value());
+    }
+    else
+    {
+        // если нет выбранной строки, но есть строки в списке
+        // ставим выделение на первую существующую
+        if (BaseCtrl::GetCurSel() == -1 && BaseCtrl::GetCount() > 0)
+            BaseCtrl::SetCurSel(0);
+
+        if (BaseCtrl::GetCurSel() != -1)
+            updateRealCurSelFromCurrent();
+    }
+
+    SetRedraw(FALSE);
+    // Hide dropdown to don`t show user if it is resized during filling items in resetSearch function
+    m_internalHidingDropdown = true;
+    if (BaseCtrl::GetDroppedState())
+        BaseCtrl::ShowDropDown(FALSE);
+    m_internalHidingDropdown = false;
+    // Returing filtered lines to control
+    resetSearch();
+    SetRedraw(TRUE);
+
+    if (m_selectedCustomText.has_value())
+    {
+        BaseCtrl::SetWindowText(m_selectedCustomText.value());
+        BaseCtrl::SetEditSel(0, m_selectedCustomText->GetLength());
+    }
+    else
+    {
+        // восстанавливаем предыдущий выделенный элемент, делаем принудительно
+        // потому что в поле может быть текст не соответствующий выделению(пустой например)
+        if (BaseCtrl::GetCurSel() == -1 && !m_allowCustomText)
+            BaseCtrl::SetCurSel(m_selectedItemIndex != -1 ? m_selectedItemIndex : 0);
+    }
+    Invalidate();
+
+    return FALSE;
+}
+
+//----------------------------------------------------------------------------//
+BOOL ComboWithSearch::OnCbnSelendcancel()
+{
+    // When we call ShowDropDown(FALSE) internally control sends OnCbnSelendcancel which we ignore
+    if (m_internalHidingDropdown)
+        return TRUE;
+
+    SetRedraw(FALSE);
+    // Hide dropdown to don`t show user if it is resized during filling items in resetSearch function
+    m_internalHidingDropdown = true;
+    if (BaseCtrl::GetDroppedState())
+        BaseCtrl::ShowDropDown(FALSE);
+    m_internalHidingDropdown = false;
+    // Returing filtered lines to control
+    resetSearch();
+    SetRedraw(TRUE);
+
+    if (m_selectedCustomText.has_value())
+    {
+        BaseCtrl::SetWindowText(m_selectedCustomText.value());
+        BaseCtrl::SetEditSel(0, m_selectedCustomText->GetLength());
+    }
+    else
+    {
+        // восстанавливаем предыдущий выделенный элемент, делаем принудительно
+        // потому что в поле может быть текст не соответствующий выделению(пустой например)
+        if (m_selectedItemIndex != -1 && !m_allowCustomText)
+            BaseCtrl::SetCurSel(m_selectedItemIndex);
+    }
+    Invalidate();
+
+    return FALSE;
+}
+
 //----------------------------------------------------------------------------//
 LRESULT ComboWithSearch::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -46,9 +164,7 @@ LRESULT ComboWithSearch::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
         case CB_SETCURSEL:
             {
                 auto res = BaseCtrl::WindowProc(message, wParam, lParam);
-
                 updateRealCurSelFromCurrent();
-
                 return res;
             }
         }
@@ -67,74 +183,6 @@ BOOL ComboWithSearch::OnCbnEditchange()
 }
 
 //----------------------------------------------------------------------------//
-BOOL ComboWithSearch::OnCbnSelendok()
-{
-    // если нет выбранной строки, но есть строки в списке
-    // ставим выделение на первую существующую
-    if (BaseCtrl::GetCurSel() == -1 && BaseCtrl::GetCount() > 0)
-        BaseCtrl::SetCurSel(1);
-
-    updateRealCurSelFromCurrent();
-
-    // убираем фильтр, возвращаем отфильтрованные строки в контрол
-    resetSearch();
-
-    return FALSE;
-}
-
-//----------------------------------------------------------------------------//
-BOOL ComboWithSearch::OnCbnSelendcancel()
-{
-    // убираем фильтр, возвращаем отфильтрованные строки в контрол
-    resetSearch();
-
-    // восстанавливаем предыдущий выделенный элемент, делаем принудительно
-    // потому что в поле может быть текст не соответствующий выделению(пустой например)
-    if (m_realSel != -1)
-        BaseCtrl::SetCurSel(m_realSel);
-
-    return FALSE;
-}
-
-//----------------------------------------------------------------------------//
-BOOL ComboWithSearch::OnCbnKillfocus()
-{
-    // убираем фильтр, возвращаем отфильтрованные строки в контрол
-    resetSearch();
-
-    return FALSE;
-}
-
-//----------------------------------------------------------------------------//
-void ComboWithSearch::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
-{
-    // по эскейпу стираем текст и убираем поиск
-    if (nChar == VK_ESCAPE && nFlags == 0)
-    {
-        // запоминаем теущее состояние ыпадающего списка
-        bool dropShow = !!BaseCtrl::GetDroppedState();
-
-        // получаем текущий текст
-        CString curWindowText;
-        BaseCtrl::GetWindowText(curWindowText);
-
-        // если у нас открыт выпадающий список и в нем есть текст
-        if (dropShow && !curWindowText.IsEmpty())
-        {
-            // убираем фильтр, возвращаем отфильтрованные строки в контрол
-            if (resetSearch())
-                adjustComboBoxToContent();
-
-            // убираем текст
-            BaseCtrl::SetWindowText(CString());
-
-            return;
-        }
-    }
-    BaseCtrl::OnKeyDown(nChar, nRepCnt, nFlags);
-}
-
-//----------------------------------------------------------------------------//
 void ComboWithSearch::executeSearch()
 {
     ::SetCursor(LoadCursor(NULL, IDC_WAIT));
@@ -146,14 +194,8 @@ void ComboWithSearch::executeSearch()
     CString curWindowText;
     BaseCtrl::GetWindowText(curWindowText);
 
-    // получаем текущее выделение
-    DWORD curSel = BaseCtrl::GetEditSel();
-
     bool bChangeInStrings = !curWindowText.IsEmpty();
     {
-        // сохраняем выделение если возможно
-        CurSelSaver selSaver(static_cast<ISelectionSaver*>(this));
-
         if (!curWindowText.IsEmpty())
         {
             try
@@ -233,26 +275,33 @@ void ComboWithSearch::executeSearch()
             }
         }
         else
-            // убираем фильтр, возвращаем отфильтрованные строки в контрол
             bChangeInStrings |= resetSearch();
     }
 
     if (!dropShow)
     {
-        if (BaseCtrl::GetCount())
-            // если был закрыт выпадающий список и он не пустой - раскрываем его
-            BaseCtrl::ShowDropDown(true);
+        DWORD curSel = BaseCtrl::GetEditSel();
+        SetRedraw(FALSE);
+
+        // If drop list was closed we will open it just to reseive OnCbnSelendok on VK_ENTER
+        BaseCtrl::ShowDropDown(true);
+
+        if (BaseCtrl::GetCount() == 0)
+            AdjustComboBoxToContent();
+
+        // After showing the drop down it replaces edit text with first string from the dropdown
+        BaseCtrl::SetWindowText(curWindowText);
+        BaseCtrl::SetEditSel(LOWORD(curSel), HIWORD(curSel));
+
+        SetRedraw(TRUE);
+        Invalidate();
     }
     else
     {
         // если были изменения - надо пересчитать высоту выпадающего списка
         if (bChangeInStrings)
-            adjustComboBoxToContent();
+            AdjustComboBoxToContent();
     }
-
-    // восстанавливаем текст и выделение
-    BaseCtrl::SetWindowText(curWindowText);
-    BaseCtrl::SetEditSel(LOWORD(curSel), HIWORD(curSel));
 
     ::SetCursor(LoadCursor(NULL, IDC_ARROW));
 }
@@ -263,7 +312,6 @@ void ComboWithSearch::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == kTextChangeTimerId)
     {
         KillTimer(kTextChangeTimerId);
-
         executeSearch();
     }
 
@@ -275,15 +323,11 @@ bool ComboWithSearch::resetSearch()
 {
     if (!m_filteredItems.empty())
     {
-        // сохраняем выделение если возможно
-        CurSelSaver selSaver(static_cast<ISelectionSaver*>(this));
-
         // убираем фильтр, возвращаем отфильтрованные строки в контрол
         for (auto &it : m_filteredItems)
         {
             BaseCtrl::InsertString(it.first, it.second.c_str());
         }
-
         m_filteredItems.clear();
 
         return true;
@@ -295,42 +339,18 @@ bool ComboWithSearch::resetSearch()
 //----------------------------------------------------------------------------//
 void ComboWithSearch::updateRealCurSelFromCurrent()
 {
+    auto currentSel = BaseCtrl::GetCurSel();
     // получаем текущее значение выделения
-    m_realSel = convertToRealIndex(BaseCtrl::GetCurSel());
-}
+    m_selectedItemIndex = convertToRealIndex(currentSel);
 
-//----------------------------------------------------------------------------//
-void ComboWithSearch::adjustComboBoxToContent()
-{
-    if(!BaseCtrl::GetSafeHwnd() || !::IsWindow(BaseCtrl::GetSafeHwnd()))
+    if (m_allowCustomText)
     {
-        ASSERT(FALSE);
-        return;
-    }
+        m_selectedCustomText.emplace();
 
-    // Make sure the drop rect for this combobox is at least tall enough to
-    // show 3 items in the dropdown list.
-    int nHeight = 0;
-    int nItemsToShow = std::min<int>(10, BaseCtrl::GetCount());
-    for (int i = 0; i < nItemsToShow; i++)
-    {
-        int nItemH = BaseCtrl::GetItemHeight(i);
-        nHeight += nItemH;
-    }
-
-    nHeight += (4 * ::GetSystemMetrics(SM_CYEDGE));
-
-    // Set the height if necessary -- save current size first
-    COMBOBOXINFO cmbxInfo;
-    cmbxInfo.cbSize = sizeof(COMBOBOXINFO);
-    if (BaseCtrl::GetComboBoxInfo(&cmbxInfo))
-    {
-        CRect rcListBox;
-        ::GetWindowRect(cmbxInfo.hwndList, &rcListBox);
-
-        if (rcListBox.Height() != nHeight)
-            ::SetWindowPos(cmbxInfo.hwndList, 0, 0, 0, rcListBox.Width(),
-                           nHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_NOSENDCHANGING);
+        if (currentSel != -1)
+            GetLBText(currentSel, m_selectedCustomText.value());
+        else
+            GetWindowText(m_selectedCustomText.value());
     }
 }
 
@@ -373,29 +393,4 @@ int ComboWithSearch::convertFromRealIndex(int index)
     }
 
     return index;
-}
-
-//----------------------------------------------------------------------------//
-int ComboWithSearch::getRealCurSel()
-{
-    return m_realSel;
-}
-
-//----------------------------------------------------------------------------//
-void ComboWithSearch::setRealCurSel(int selection)
-{
-    BaseCtrl::SetCurSel(convertFromRealIndex(selection));
-}
-
-//----------------------------------------------------------------------------//
-CurSelSaver::CurSelSaver(ISelectionSaver* pSaverClass)
-    : m_saverClass(pSaverClass)
-    , m_savedRealSel(m_saverClass->getRealCurSel())
-{}
-
-//----------------------------------------------------------------------------//
-CurSelSaver::~CurSelSaver()
-{
-    if (m_savedRealSel != -1)
-        m_saverClass->setRealCurSel(m_savedRealSel);
 }
