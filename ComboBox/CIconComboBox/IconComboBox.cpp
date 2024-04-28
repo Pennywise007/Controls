@@ -50,7 +50,7 @@ void CIconComboBox::SetIconList(_In_ std::list<HICON> iconList, _In_opt_ CSize i
 	}
 
 	ReleaseResources();
-	m_imageList.Create(iconSizes.cx, iconSizes.cy, ILC_COLOR32, 0, iconList.size());
+	m_imageList.Create(iconSizes.cx, iconSizes.cy, ILC_COLOR32, 0, (int)iconList.size());
 
 	for (auto& it : iconList)
 		m_imageList.Add(it);
@@ -68,7 +68,7 @@ void CIconComboBox::SetBitmapsList(_In_ std::list<CBitmap*> bitmaps, _In_opt_ CS
 
 	ReleaseResources();
 	// we use ILC_COLOR32 because we will draw icons, otherwise use ILC_COLOR24 | ILC_MASK 
-	m_imageList.Create(bitmapSizes.cx, bitmapSizes.cy, ILC_COLOR32, 0, bitmaps.size());
+	m_imageList.Create(bitmapSizes.cx, bitmapSizes.cy, ILC_COLOR32, 0, int(bitmaps.size()));
 	
 	for (auto it : bitmaps)
 	{
@@ -101,7 +101,7 @@ int CIconComboBox::InsertItem(_In_ int iItemIndex,
 
 	cbei.iItem = iItemIndex;
 	cbei.pszText = (LPTSTR)pszText;
-	cbei.cchTextMax = wcslen(pszText) * sizeof(WCHAR);
+	cbei.cchTextMax = int(wcslen(pszText) * sizeof(WCHAR));
 	cbei.iImage = iImageIndex;
 	cbei.iSelectedImage = iSelectedImage != kUseImageIndex ? iSelectedImage : iImageIndex;
 	cbei.iIndent = iIndent;
