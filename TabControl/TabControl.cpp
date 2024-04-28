@@ -86,7 +86,9 @@ BOOL CTabControl::DeleteTab(_In_ int nItem)
     if (res == TRUE)
     {
         ASSERT(nItem < (int)m_tabWindows.size());
-        m_tabWindows.erase(std::next(m_tabWindows.begin(), nItem));
+        auto tabIt = std::next(m_tabWindows.begin(), nItem);
+        tabIt->get()->DestroyWindow();
+        m_tabWindows.erase(tabIt);
     }
 
     return res;
@@ -132,6 +134,8 @@ void CTabControl::onSelChanged()
 void CTabControl::layoutCurrentWindow()
 {
     int curSel = CTabCtrl::GetCurSel();
+    if (curSel == -1)
+        return;
 
     ASSERT(curSel < (int)m_tabWindows.size());
     auto window = *std::next(m_tabWindows.begin(), curSel);
