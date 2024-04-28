@@ -65,6 +65,13 @@ CTrayHelper::~CTrayHelper()
 }
 
 //----------------------------------------------------------------------------//
+CTrayHelper& CTrayHelper::Instance()
+{
+    static CTrayHelper s;
+    return s;
+}
+
+//----------------------------------------------------------------------------//
 void CTrayHelper::addTrayIcon(const HICON& icon,
                               const CString& tipText,
                               const CreateTrayMenu& onCreateTrayMenu /*= nullptr*/,

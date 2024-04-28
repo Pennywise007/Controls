@@ -7,9 +7,18 @@
 // Helper class for tray setup and notification display
 class CTrayHelper : public CDialogEx
 {
-public:
+
+private:
+    // allow creating only from instance
     CTrayHelper();
     ~CTrayHelper();
+
+    CTrayHelper(const CTrayHelper&) = delete;
+    CTrayHelper& operator=(const CTrayHelper&) = delete;
+
+public:
+    // get anchor manager instance
+    static CTrayHelper& Instance();
 
     // Function for creating menu
     typedef std::function<HMENU()> CreateTrayMenu;
