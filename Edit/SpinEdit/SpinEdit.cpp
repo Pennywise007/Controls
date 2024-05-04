@@ -79,11 +79,11 @@ void CSpinEdit::SetSpinAlign(_In_opt_  spin_edit::SpinAlign Align /*=  spin_edit
 void CSpinEdit::SetRange(_In_ double Left, _In_ double Right)
 {
     if (IsWindow(m_spinCtrl))
-        m_spinCtrl.SetRange(CEditBase::m_bUsePositivesDigitsOnly ? max(0, Left) : Left, Right);
+        m_spinCtrl.SetRange(CEditBase::m_bUsePositivesDigitsOnly ? std::max<double>(0., Left) : Left, Right);
     m_spinRange = std::make_pair(Left, Right);
 
     CEditBase::SetUseCtrlLimits(true);
-    CEditBase::SetMinMaxLimits(CEditBase::m_bUsePositivesDigitsOnly ? max(0, Left) : Left, Right);
+    CEditBase::SetMinMaxLimits(CEditBase::m_bUsePositivesDigitsOnly ? std::max<double>(0., Left) : Left, Right);
 }
 
 void CSpinEdit::GetRange(_Out_ double& Left, _Out_ double& Right) const

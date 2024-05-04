@@ -1326,7 +1326,7 @@ BOOL CListGroupCtrl::OnGroupTaskClick(NMHDR* pNMHDR, LRESULT* /*pResult*/)
 
     // текст
     CString TaskText;
-    DWORD Size = max(sCheckGroup.GetLength(), sUnCheckGroup.GetLength()) + 1;
+    DWORD Size = std::max<int>(sCheckGroup.GetLength(), sUnCheckGroup.GetLength()) + 1;
 
     LVGROUP lg = { 0 };
     lg.cbSize = sizeof(lg);
