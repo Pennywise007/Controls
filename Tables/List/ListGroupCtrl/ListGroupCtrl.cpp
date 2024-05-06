@@ -482,6 +482,15 @@ int CListGroupCtrl::InsertColumn(_In_ int nCol, _In_ LPCTSTR lpszColumnHeading, 
         m_SortFunct.emplace_back(std::make_pair(nCol, SortFunct));
 
     const int Res = CListCtrl::InsertColumn(nCol, lpszColumnHeading, nFormat, nWidth, nSubItem);
+    if (Res == 0 && nFormat != LVCFMT_LEFT)
+    {
+        // Sometimes control doesn't want to set special formats to first column
+        LVCOLUMN colInfo;
+        colInfo.mask = LVCF_FMT;
+        GetColumn(0, &colInfo);
+        colInfo.fmt |= LVCFMT_CENTER;
+        SetColumn(0, &colInfo);
+    }
 
     // добавляем первой колонке общий чекбокс
     if (GetExtendedStyle() & LVS_EX_CHECKBOXES && Res == 0)
