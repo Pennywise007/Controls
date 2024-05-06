@@ -53,7 +53,7 @@ public: // anchoring controls
     /// <param name="anchorTarget">Target for anchoring</param>
     /// <param name="anchoredSides">Sides of anchored window</param>
     /// <param name="anchorTargetSide">Target side for anchoring another window</param>
-    /// <param name="ratio">Aspect ratio when changing sides of anchoring window</param>
+    /// <param name="ratio">1-100, aspect ratio when changing sides of anchoring window</param>
     static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio);
     static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio);
     static void AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& removingAnchoredForSides = AllAnchorSides);

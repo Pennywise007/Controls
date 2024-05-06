@@ -6,6 +6,8 @@
 #include <cmath>
 #include <list>
 
+#include "../Edit/SpinEdit/SpinEdit.h"
+
 #include "../DefaultWindowProc.h"
 
 Layout& Layout::Instance()
@@ -328,13 +330,25 @@ CRect Layout::GetWindowRect(HWND hWnd, HWND hAttachingWindow /*= nullptr*/)
     CRect rect;
     if (const HWND parent = ::GetParent(hWnd); ::IsWindow(parent) && (!hAttachingWindow || ::GetParent(hAttachingWindow) != hWnd))
     {
-        ::GetWindowRect(hWnd, rect);
+        CWnd* pWnd = CWnd::FromHandle(hWnd);
+
+        // Special case for CSpinEdit because we change its width during initialization
+        if (DYNAMIC_DOWNCAST(CSpinEdit, pWnd) != NULL)
+            ((CSpinEdit*)pWnd)->GetWindowRect(rect);
+        else
+            ::GetWindowRect(hWnd, rect);
+
         CWnd::FromHandle(parent)->ScreenToClient(rect);
     }
     else
     {
         CWnd* pWnd = CWnd::FromHandle(hWnd);
-        pWnd->GetClientRect(rect);
+
+        // Special case for CSpinEdit because we change its width during initialization
+        if (DYNAMIC_DOWNCAST(CSpinEdit, pWnd) != NULL)
+            ((CSpinEdit*)pWnd)->GetClientRect(rect);
+        else
+            pWnd->GetClientRect(rect);
 
         /*if (DYNAMIC_DOWNCAST(CFormView, pWnd) != NULL)
         {
