@@ -3,6 +3,7 @@
 
 #include "SubItemsEditor.h"
 
+#include "../../../../DefaultWindowProc.h"
 #include "../../../../Utils/WindowClassRegistration.h"
 
 namespace controls::list::widgets {
@@ -86,19 +87,13 @@ void CSubItemEditorWindow::createWindow(CWnd* parent, const CRect& rect)
 {
     // создаем окно
     if (CDialogEx::CreateEx(0, CString(typeid(*this).name()), L"",
-                            WS_CLIPCHILDREN,
-                            0, 0, 0, 0,
+                            WS_CHILD | WS_CLIPCHILDREN,
+                            rect.left, rect.top, rect.Width(), rect.Height(),
                             parent->m_hWnd, nullptr, nullptr) == FALSE)
     {
         assert(false);
         return;
     }
-
-    // убираем заголовок
-    CDialogEx::ModifyStyle(WS_CAPTION, 0, SWP_FRAMECHANGED);
-
-    // после убирания заголовка проставляем новое положение окна
-    CDialogEx::MoveWindow(rect);
 }
 
 //----------------------------------------------------------------------------//
@@ -108,6 +103,11 @@ void CSubItemEditorWindow::setInternalControl(std::shared_ptr<CWnd> pControlWnd)
     m_internalControl = pControlWnd;
 
     ::SetFocus(m_internalControl->m_hWnd);
+
+    DefaultWindowProc::OnWindowMessage(*pControlWnd.get(), WM_KILLFOCUS, [&](HWND hWnd, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+        // If window lost focus - user accepted input
+        OnOK();
+    }, this);
 }
 
 //----------------------------------------------------------------------------//
@@ -162,7 +162,10 @@ void CSubItemEditorWindow::OnDestroy()
     CDialogEx::OnDestroy();
 
     if (m_internalControl && ::IsWindow(m_internalControl->m_hWnd))
+    {
+        DefaultWindowProc::RemoveCallback(*m_internalControl, WM_KILLFOCUS, this);
         m_internalControl->DestroyWindow();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

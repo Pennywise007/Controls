@@ -144,7 +144,6 @@ void SubItemsEditor<CBaseList>::EditItem(int item, int subItem)
         assert(false);  // не смогли получить область куда был клик
         return;
     }
-    CBaseList::ClientToScreen(htItemRect);
 
     // remove previous edit window
     if (m_editSubItemWindow)
@@ -178,20 +177,18 @@ void SubItemsEditor<CBaseList>::EditItem(int item, int subItem)
         return;
     }
 
-    // проставляем владельца чтобы сообщения шли нам
-    m_editSubItemWindow->SetOwner(this);
-
     // проставляем шрифт от таблицы
     editorControl->SetFont(CBaseList::GetFont());
     
-    m_editSubItemWindow->ShowWindow(SW_SHOW);
-
     // ставим контрол на место
     CRect editControlRect;
     m_editSubItemWindow->GetClientRect(editControlRect);
     editorControl->MoveWindow(editControlRect);
 
     editorControl->SetWindowText(CBaseList::GetItemText(item, subItem));
+
+    m_editSubItemWindow->ShowWindow(SW_SHOW);
+    editorControl->ShowWindow(SW_SHOW);
 
     // выделяем весь текст
     ::PostMessage(editorControl->m_hWnd, EM_SETSEL, 0, editorControl->GetWindowTextLengthW());
@@ -237,8 +234,8 @@ afx_msg void SubItemsEditor<CBaseList>::OnLButtonDblClk(UINT nFlags, CPoint poin
             hti.flags = LVM_SUBITEMHITTEST;
             CBaseList::SubItemHitTest(&hti);
 
-            if (m_editSubItemWindow)
-                assert(false);   // предыдущее должно быть уже уничтожено
+            //if (m_editSubItemWindow)
+               // assert(false);   // предыдущее должно быть уже уничтожено
 
             EditItem(hti.iItem, hti.iSubItem);
         }
