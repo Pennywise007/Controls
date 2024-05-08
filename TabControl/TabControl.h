@@ -18,6 +18,8 @@ public:
     const CWnd& operator()() const { return *this; }
 
 public:
+    void ResizeTabsToFitFullControlWidth(bool resize = true);
+
     LONG AddTab(_In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CWnd>& tabWindow);
     LONG AddTab(_In_z_ LPCTSTR lpszItem, _In_ const std::shared_ptr<CDialog>& tabDialog, UINT nIDTemplate);
 
@@ -56,5 +58,6 @@ private:
     void onSelChanged();
 
 private:
+    bool m_resizeTabsToFitFullControlWidth = false;
     std::list<std::shared_ptr<CWnd>> m_tabWindows;
 };

@@ -8,6 +8,12 @@ BEGIN_MESSAGE_MAP(CTabControl, CTabCtrl)
     ON_NOTIFY_REFLECT_EX(TCN_SELCHANGE, &CTabControl::OnTcnSelchange)
 END_MESSAGE_MAP()
 
+void CTabControl::ResizeTabsToFitFullControlWidth(bool resize)
+{
+    m_resizeTabsToFitFullControlWidth = resize;
+    layoutCurrentWindow();
+}
+
 LONG CTabControl::AddTab(_In_z_ LPCTSTR lpszItem, _In_ const  std::shared_ptr<CWnd>& tabWindow)
 {
     return CTabControl::InsertTab(GetItemCount(), lpszItem, tabWindow);
@@ -145,10 +151,13 @@ void CTabControl::layoutCurrentWindow()
     CTabCtrl::GetItemRect(curSel, &lpRect);
     CRect clRc;
     CTabCtrl::GetClientRect(&clRc);
+    const auto controlWidth = clRc.Width();
     clRc.top += lpRect.bottom;
     --clRc.right;
-
     clRc.InflateRect(-2, -2);
 
     window->MoveWindow(&clRc, TRUE);
+
+    if (m_resizeTabsToFitFullControlWidth)
+        CTabCtrl::SetMinTabWidth(controlWidth / CTabCtrl::GetItemCount());
 }
