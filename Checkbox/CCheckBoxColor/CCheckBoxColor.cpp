@@ -1,5 +1,4 @@
 //-----------------------------------------------------------------------------
-#include "stdafx.h"
 #include "CCheckBoxColor.h"
 //-----------------------------------------------------------------------------
 BEGIN_MESSAGE_MAP(CCheckBoxColor, CButton)
@@ -53,13 +52,13 @@ CCheckBoxColor & CCheckBoxColor::operator = (const CCheckBoxColor & val)
 //-----------------------------------------------------------------------------
 void CCheckBoxColor::PreSubclassWindow()
 {	//	SetWindowTheme(m_hWnd, L"wstr", L"wstr");
-	SetWindowTheme(m_hWnd, L"", L"");
+	SetWindowTheme(m_hWnd, L"EXPLORER", NULL);
 	CButton::PreSubclassWindow();
 }
 //-----------------------------------------------------------------------------
 BOOL CCheckBoxColor::PreCreateWindow(CREATESTRUCT& cs)
 {
-	SetWindowTheme(m_hWnd, L"", L"");
+	SetWindowTheme(m_hWnd, L"EXPLORER", NULL);
 	return CButton::PreCreateWindow(cs);
 }
 //-----------------------------------------------------------------------------
