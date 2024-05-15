@@ -16,8 +16,16 @@ BEGIN_MESSAGE_MAP(ComboWithSearch, CComboBox)
     ON_CONTROL_REFLECT_EX(CBN_SELENDOK,        &ComboWithSearch::OnCbnSelendok)
     ON_CONTROL_REFLECT_EX(CBN_SELENDCANCEL,    &ComboWithSearch::OnCbnSelendcancel)
     ON_CONTROL_REFLECT_EX(CBN_EDITCHANGE,      &ComboWithSearch::OnCbnEditchange)
+    ON_WM_CTLCOLOR()
     ON_WM_TIMER()
 END_MESSAGE_MAP()
+
+//----------------------------------------------------------------------------//
+ComboWithSearch::ComboWithSearch()
+{
+    m_editBkBrush.CreateSolidBrush(RGB(255, 255, 255));
+    m_dropdownBkBrush.CreateSolidBrush(RGB(255, 255, 255));
+}
 
 //----------------------------------------------------------------------------//
 void ComboWithSearch::SetWindowText(const CString& text)
@@ -64,10 +72,50 @@ void ComboWithSearch::AdjustComboBoxToContent()
 }
 
 //----------------------------------------------------------------------------//
+HBRUSH ComboWithSearch::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+    if (m_editBkColor.has_value())
+        pDC->SetBkColor(m_editBkColor.value());
+    if (m_textColor.has_value())
+        pDC->SetTextColor(m_textColor.value());
+
+    auto* currentFocus = GetFocus();
+    if (currentFocus != this && currentFocus != GetWindow(GW_CHILD))
+        // If window is not focused for drowing edit background will be used brush instead of pDC
+        return m_editBkBrush;
+
+    return m_dropdownBkBrush;
+}
+//----------------------------------------------------------------------------//
 void ComboWithSearch::AllowCustomText(bool allow)
 {
     m_allowCustomText = allow;
     m_selectedCustomText.reset();
+}
+
+//----------------------------------------------------------------------------//
+void ComboWithSearch::SetBkColor(std::optional<COLORREF> color)
+{
+    m_editBkBrush.DeleteObject();
+    m_editBkBrush.CreateSolidBrush(color.value_or(RGB(255, 255, 255)));
+
+    m_editBkColor = std::move(color);
+    Invalidate();
+}
+
+//----------------------------------------------------------------------------//
+void ComboWithSearch::SetTextColor(std::optional<COLORREF> color)
+{
+    m_textColor = std::move(color);
+    Invalidate();
+}
+
+//----------------------------------------------------------------------------//
+void ComboWithSearch::SetDropdownBkColor(std::optional<COLORREF> color)
+{
+    m_dropdownBkBrush.DeleteObject();
+    m_dropdownBkBrush.CreateSolidBrush(color.value_or(RGB(255, 255, 255)));
+    Invalidate();
 }
 
 //----------------------------------------------------------------------------//
@@ -350,6 +398,7 @@ void ComboWithSearch::updateRealCurSelFromCurrent()
         if (currentSel != -1)
             GetLBText(currentSel, m_selectedCustomText.value());
         else
+           //m_selectedCustomText.reset();
             GetWindowText(m_selectedCustomText.value());
     }
 }
