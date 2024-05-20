@@ -62,15 +62,28 @@ T change_spin_val(_In_ bool increament, _In_ T currentVal, _In_ size_t& countCha
 
 BEGIN_MESSAGE_MAP(CSpinButton, CWnd)
     ON_NOTIFY_REFLECT_EX(UDN_DELTAPOS, &CSpinButton::OnDeltapos)
-    ON_WM_ERASEBKGND()
+    ON_WM_TIMER()
+    ON_WM_ENABLE()
     ON_WM_PAINT()
+    ON_WM_ERASEBKGND()
+    ON_WM_LBUTTONDBLCLK()
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONUP()
     ON_WM_MOUSEMOVE()
     ON_WM_MOUSELEAVE()
-    ON_WM_TIMER()
-    ON_WM_LBUTTONDBLCLK()
 END_MESSAGE_MAP()
+
+CSpinButton::CSpinButton()
+    : m_hTheme(OpenThemeData(m_hWnd, L"Spin"))
+{
+    ASSERT(m_hTheme);
+}
+
+CSpinButton::~CSpinButton()
+{
+    if (m_hTheme)
+        CloseThemeData(m_hTheme);
+}
 
 void CSpinButton::SetRange(_In_ double Left, _In_ double Right)
 {
@@ -202,9 +215,6 @@ void CSpinButton::OnPaint()
     CMemDC memDC(dcPaint, rect);
     CDC& dc = memDC.GetDC();
 
-    HTHEME hTheme = NULL;
-
-    hTheme = OpenThemeData(m_hWnd, L"Spin");
     dc.FillSolidRect(rect, GetBkColor(dc.m_hDC));
 
     const UPSTATES stateUp = [&]()
@@ -228,9 +238,8 @@ void CSpinButton::OnPaint()
         return DNS_NORMAL;
     }();
 
-    DrawThemeBackground(hTheme, dc.m_hDC, SPNP_UP, stateUp, GetUpRect(), 0);
-    DrawThemeBackground(hTheme, dc.m_hDC, SPNP_DOWN, stateDown, GetDownRect(), 0);
-    CloseThemeData(hTheme);
+    DrawThemeBackground(m_hTheme, dc.m_hDC, SPNP_UP, stateUp, GetUpRect(), 0);
+    DrawThemeBackground(m_hTheme, dc.m_hDC, SPNP_DOWN, stateDown, GetDownRect(), 0);
 }
 
 void CSpinButton::OnMouseMove(UINT nFlags, CPoint point)
@@ -330,4 +339,10 @@ BOOL CSpinButton::OnDeltapos(NMHDR* pNMHDR, LRESULT* pResult)
 
     *pResult = 1;
     return TRUE;
+}
+
+void CSpinButton::OnEnable(BOOL bEnable)
+{
+    CWnd::OnEnable(bEnable);
+    Invalidate();
 }

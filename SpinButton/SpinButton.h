@@ -17,6 +17,9 @@
 class CSpinButton : public CWnd
 {
 public:
+	CSpinButton();
+	~CSpinButton();
+
 	DECLARE_MESSAGE_MAP()
 public:
 	// Managing range of values
@@ -49,6 +52,7 @@ protected:
 	HitTest m_buttonDown = HitTest::eUnknown;
 	HitTest m_hoveredButton = HitTest::eUnknown;
 
+	HTHEME m_hTheme;
 	CWnd* m_linkedBuddy = nullptr;
 
 	size_t m_timerTickCount = 0;
@@ -66,4 +70,5 @@ public:
 	afx_msg void OnMouseLeave();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
+	afx_msg void OnEnable(BOOL bEnable);
 };
