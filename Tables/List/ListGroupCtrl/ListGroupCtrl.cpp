@@ -1539,7 +1539,8 @@ void CListGroupCtrl::PreSubclassWindow()
     }
 
     // fix flickering headers
-    CListCtrl::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
+	// Commented because it causing probems with resizing with AutoScaleColumns
+    //CListCtrl::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
 }
 
 bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive /*= false*/)
