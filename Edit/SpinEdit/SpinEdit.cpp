@@ -18,6 +18,7 @@ BEGIN_MESSAGE_MAP(CSpinEdit, CEditBase)
     ON_WM_SHOWWINDOW()
     ON_WM_WINDOWPOSCHANGING()
     ON_WM_ENABLE()
+    ON_CONTROL_REFLECT_EX(EN_KILLFOCUS, &CSpinEdit::OnEnKillfocus)
 END_MESSAGE_MAP()
 
 CSpinEdit::CSpinEdit(_In_opt_ UINT controlID /* = kUndefinedControlId*/)
@@ -197,4 +198,13 @@ void CSpinEdit::OnEnable(BOOL bEnable)
     CEditBase::OnEnable(bEnable);
 
     m_spinCtrl.EnableWindow(bEnable);
+}
+
+BOOL CSpinEdit::OnEnKillfocus()
+{
+    CString text;
+    GetWindowText(text);
+    if (text.IsEmpty())
+        SetWindowText(L"0");
+    return FALSE;
 }

@@ -74,4 +74,5 @@ public:
 	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
     afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);
 	afx_msg void OnEnable(BOOL bEnable);
+	afx_msg BOOL OnEnKillfocus();
 };
