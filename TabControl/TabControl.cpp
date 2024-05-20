@@ -153,8 +153,7 @@ void CTabControl::layoutCurrentWindow()
     CTabCtrl::GetClientRect(&clRc);
     const auto controlWidth = clRc.Width();
     clRc.top += lpRect.bottom;
-    --clRc.right;
-    clRc.InflateRect(-2, -2);
+    clRc.InflateRect(-1, -1);
 
     window->MoveWindow(&clRc, TRUE);
 
