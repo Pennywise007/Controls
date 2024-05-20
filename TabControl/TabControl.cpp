@@ -11,6 +11,9 @@ END_MESSAGE_MAP()
 void CTabControl::AutoResizeTabsToFitFullControlWidth(bool resize)
 {
     m_resizeTabsToFitFullControlWidth = resize;
+
+    ModifyStyle(0, TCS_FIXEDWIDTH);
+
     layoutCurrentWindow();
 }
 
@@ -120,6 +123,8 @@ void CTabControl::onSelChanged()
 {
     const int curSel = CTabCtrl::GetCurSel();
 
+    SetRedraw(FALSE);
+
     // Переключаем активную вкладку
     int curIndex = 0;
     for (auto& windowTab : m_tabWindows)
@@ -135,6 +140,8 @@ void CTabControl::onSelChanged()
             windowTab->ShowWindow(SW_HIDE);
         ++curIndex;
     }
+
+    SetRedraw(TRUE);
 }
 
 void CTabControl::layoutCurrentWindow()
@@ -151,12 +158,25 @@ void CTabControl::layoutCurrentWindow()
     CTabCtrl::GetItemRect(curSel, &lpRect);
     CRect clRc;
     CTabCtrl::GetClientRect(&clRc);
-    const auto controlWidth = clRc.Width();
+    auto controlWidth = clRc.Width();
     clRc.top += lpRect.bottom;
     clRc.InflateRect(-1, -1);
+    clRc.right -= 2;
+    clRc.bottom--;
 
     window->MoveWindow(&clRc, TRUE);
 
     if (m_resizeTabsToFitFullControlWidth)
-        CTabCtrl::SetMinTabWidth((controlWidth - 2)/ CTabCtrl::GetItemCount());
+    {
+        CRect rectItem;
+        if (GetItemRect(0, &rectItem))
+        {
+            auto scrollHwnd = ::FindWindowEx(m_hWnd, NULL, UPDOWN_CLASS, NULL);
+
+            do
+            {
+                SetItemSize(CSize((controlWidth - 2) / CTabCtrl::GetItemCount(), rectItem.Height()));
+            } while (scrollHwnd && ::IsWindowVisible(scrollHwnd) && (--controlWidth > 0));
+        }
+    }
 }

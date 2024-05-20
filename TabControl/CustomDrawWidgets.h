@@ -183,6 +183,7 @@ CRect CCustomDrawTabCtrl<CBaseTabCtrl>::GetTabsAreaRect() const
 	CBaseTabCtrl::GetItemRect(0, &rcTab);
 
 	rcClient.top += rcTab.Height() + 2;
+	rcClient.right -= 2;
 	return rcClient;
 }
 
@@ -325,7 +326,6 @@ void CButtonsTabCtrl<CBaseTabCtrl>::DrawTab(CDC& pDC, int nIndex, bool selected,
 	{
 		rcFullItem.bottom += 6;
 		rcFullItem.left--;
-		rcFullItem.right++;
 	}
 
 	HTHEME theme = m_hButtonTheme;
