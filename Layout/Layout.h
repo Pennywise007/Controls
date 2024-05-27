@@ -154,7 +154,7 @@ struct LayoutLoader : private CMFCDynamicLayoutData // for access to m_listCtrls
     /// <summary>
     /// Load layout from resource file and apply it to Layout
     /// Must be called after CDialog::OnInitDialog or CFormView::OnInitDialog, example:
-    /// LayoutLoader::ApplyLayoutFromResourceForWindow(*this, m_lpszTemplateName);
+    /// LayoutLoader::ApplyLayoutFromResource(*this, m_lpszTemplateName);
     /// </summary>
     /// <param name="lpszResourceName">name or MAKEINTRESOURCE, wnd.m_lpszTemplateName</param>
     static bool ApplyLayoutFromResource(CFormView& formView, LPCTSTR lpszResourceName);
