@@ -2,6 +2,7 @@
 
 #include <afxtoolbar.h>
 #include <Afxglobals.h>
+#include <xutility>
 
 IMPLEMENT_DYNCREATE(CToolWindow, CWnd)
 
@@ -122,15 +123,15 @@ _NODISCARD CSize CToolWindow::GetWindowSize()
 
     if (!params.m_bDrawDescription || m_drawProxy.m_description.IsEmpty())
     {
-        sizeWindow.cy = max(sizeWindow.cy, m_drawProxy.m_imageSize.cy);
+        sizeWindow.cy = std::max<LONG>(sizeWindow.cy, m_drawProxy.m_imageSize.cy);
     }
     else
     {
         sizeDescr = m_drawProxy.OnDrawDescription(&dc, rectText, TRUE);
 
         sizeWindow.cy += sizeDescr.cy + 2 * m_ptMargin.y;
-        sizeWindow.cx = max(sizeWindow.cx, sizeDescr.cx);
-        sizeWindow.cy = max(sizeWindow.cy, m_drawProxy.m_imageSize.cy);
+        sizeWindow.cx = std::max<LONG>(sizeWindow.cx, sizeDescr.cx);
+        sizeWindow.cy = std::max<LONG>(sizeWindow.cy, m_drawProxy.m_imageSize.cy);
     }
 
     if (m_drawProxy.m_imageSize.cx > 0 && params.m_bDrawIcon)
@@ -144,7 +145,7 @@ _NODISCARD CSize CToolWindow::GetWindowSize()
     const int nFixedWidth = m_drawProxy.GetFixedWidth();
     if (nFixedWidth > 0 && sizeDescr != CSize(0, 0))
     {
-        sizeWindow.cx = max(sizeWindow.cx, nFixedWidth);
+        sizeWindow.cx = std::max<LONG>(sizeWindow.cx, nFixedWidth);
     }
     return sizeWindow;
 }
@@ -223,6 +224,8 @@ CSize CToolWindow::OnDrawLabel(CDC* pDC, CRect rect, BOOL bCalcOnly)
     ASSERT_VALID(pDC);
 
     CSize sizeText(0, 0);
+    if (m_label.IsEmpty())
+        return sizeText;
 
     CString strText = m_label;
     strText.Replace(_T("\t"), _T("    "));
