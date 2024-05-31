@@ -359,7 +359,7 @@ void CButtonsTabCtrl<CBaseTabCtrl>::DrawTab(CDC& pDC, int nIndex, bool selected,
 	DrawThemeBackground(theme, intersectedDc, iPartId, iStateId, &rcFullItem, NULL);
 
 	SetBkMode(intersectedDc, TRANSPARENT);
-	DrawText(intersectedDc, szLabel, wcslen(szLabel), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	DrawText(intersectedDc, szLabel, (int)wcslen(szLabel), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
 	pDC.RestoreDC(nSavedDC);
 }

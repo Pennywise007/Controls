@@ -447,6 +447,17 @@ void CListGroupCtrl::SelectItem(int nItem, bool ensureVisible /*= true*/)
         EnsureVisible(nItem, TRUE);
 }
 
+int CListGroupCtrl::GetLastSelectedItem() const
+{
+    POSITION pos = GetFirstSelectedItemPosition();
+    int nItem = -1;
+    while (pos)
+    {
+        nItem = GetNextSelectedItem(pos);
+    }
+    return nItem;
+}
+
 std::vector<int> CListGroupCtrl::GetSelectedItems() const
 {
     std::vector<int> selectedItems;
@@ -1674,10 +1685,13 @@ void CListGroupCtrl::OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags)
 {
     if (nChar == 'A' && is_key_pressed(VK_CONTROL) && !is_key_pressed(VK_SHIFT))
     {
+        SetRedraw(FALSE);
         for (int i = 0, itemCount = GetItemCount(); i < itemCount; ++i)
         {
             SetItemState(i, LVIS_SELECTED, LVIS_SELECTED);
         }
+        SetRedraw(TRUE);
+        Invalidate();
     }
 
     CListCtrl::OnKeyUp(nChar, nRepCnt, nFlags);

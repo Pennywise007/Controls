@@ -114,6 +114,7 @@ public:	//**********************************************************************
     void ResetSearch();
     //*********************************************************************************************
     void SelectItem(int nItem, bool ensureVisible = true);
+    int GetLastSelectedItem() const;
     std::vector<int> GetSelectedItems() const;
     void ClearSelection();
     //*********************************************************************************************
