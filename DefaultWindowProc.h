@@ -5,8 +5,6 @@
 #include <list>
 #include <unordered_map>
 
-#include <ext/core/tracer.h>
-
 /*
 * DefaultWindowProc manager, allow to add callbacks on window messages
 *
