@@ -68,7 +68,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 protected:
-	virtual void DrawTab(CDC & pDC, int nIndex, bool selected, bool hovered) = 0;
+	virtual void DrawTab(CDC& pDC, int nIndex, bool selected, bool hovered) = 0;
 	virtual COLORREF BorderColor() const = 0;
 
 private:
@@ -121,7 +121,7 @@ void CCustomDrawTabCtrl<CBaseTabCtrl>::OnPaint()
 	if (m_nHoverTab != -1 && m_nHoverTab != nCurSel)
 		DrawTab(dc, m_nHoverTab, false, true);
 
-	// draw frame after drawing tabs just to overlab frame
+	// draw frame after drawing tabs just to overlap frame
 	dc.FrameRect(&rcTabsArea, &frameBrush);
 
 	if (nCurSel != -1)
@@ -352,14 +352,14 @@ void CButtonsTabCtrl<CBaseTabCtrl>::DrawTab(CDC& pDC, int nIndex, bool selected,
 	// Cut not interesting draw button stuff like extra gap from drawing frame
 	int nSavedDC = pDC.SaveDC();
 	pDC.IntersectClipRect(rect);
-	auto intersectedDc = pDC.GetSafeHdc();
 
 	if (IsThemeBackgroundPartiallyTransparent(theme, iPartId, iStateId))
-		DrawThemeParentBackground(CBaseTabCtrl::m_hWnd, intersectedDc, &rcFullItem);
-	DrawThemeBackground(theme, intersectedDc, iPartId, iStateId, &rcFullItem, NULL);
+		DrawThemeParentBackground(CBaseTabCtrl::m_hWnd, pDC, &rcFullItem);
+	DrawThemeBackground(theme, pDC, iPartId, iStateId, &rcFullItem, NULL);
 
-	SetBkMode(intersectedDc, TRANSPARENT);
-	DrawText(intersectedDc, szLabel, (int)wcslen(szLabel), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	auto oldBkMode = SetBkMode(pDC, TRANSPARENT);
+	DrawText(pDC, szLabel, (int)wcslen(szLabel), &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	SetBkMode(pDC, oldBkMode);
 
 	pDC.RestoreDC(nSavedDC);
 }
