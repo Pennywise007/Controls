@@ -568,17 +568,34 @@ void CListGroupCtrl::SetProportionalResizingColumns(const std::unordered_set<int
 
 BOOL CListGroupCtrl::ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags /*= 0*/)
 {
-    SetExtendedStyle(GetExtendedStyle() | dwAdd);
+    ASSERT(!(dwAdd & LVS_EX_CHECKBOXES)); // Deprecated, use ModifyExtendedStyle
+
+    return CListCtrl::ModifyStyle(dwRemove, dwAdd, nFlags);
+}
+
+void CListGroupCtrl::ModifyExtendedStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd)
+{
+    auto style = (GetExtendedStyle() & ~dwRemove) | dwAdd;
+    SetExtendedStyle(style);
 
     if (dwAdd & LVS_EX_CHECKBOXES)
     {
         const HWND header = *GetHeaderCtrl();
         DWORD dwHeaderStyle = ::GetWindowLong(header, GWL_STYLE);
-        dwHeaderStyle |= HDS_CHECKBOXES;
+        // add HDS_BUTTONS because in LVS_NOSORTHEADER mode we don't receive clicks on main checkbox
+        dwHeaderStyle |= HDS_CHECKBOXES | HDS_BUTTONS;
         ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
     }
-
-    return CListCtrl::ModifyStyle(dwRemove, 0, nFlags);
+    else if (dwRemove & LVS_EX_CHECKBOXES)
+    {
+        const HWND header = *GetHeaderCtrl();
+        DWORD dwHeaderStyle = ::GetWindowLong(header, GWL_STYLE);
+        dwHeaderStyle &= ~HDS_CHECKBOXES;
+        // restore default state in LVS_NOSORTHEADER mode
+        if (GetStyle() & LVS_NOSORTHEADER)
+            dwHeaderStyle &= ~HDS_BUTTONS;
+        ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
+    }
 }
 
 void CListGroupCtrl::CheckAllElements(bool bChecked)
@@ -1393,6 +1410,9 @@ void CListGroupCtrl::OnLButtonDblClk(UINT nFlags, CPoint point)
 
 BOOL CListGroupCtrl::OnHeaderClick(NMHDR* pNMHDR, LRESULT* /*pResult*/)
 {
+    if (GetStyle() & LVS_NOSORTHEADER)
+        return true;
+
     const NMLISTVIEW* pLV = reinterpret_cast<NMLISTVIEW*>(pNMHDR);
 
     const int nCol = pLV->iSubItem;
@@ -1543,10 +1563,7 @@ void CListGroupCtrl::PreSubclassWindow()
 
     if (extendedListStyle & LVS_EX_CHECKBOXES)
     {
-        const HWND header = *GetHeaderCtrl();
-        DWORD dwHeaderStyle = ::GetWindowLong(header, GWL_STYLE);
-        dwHeaderStyle |= HDS_CHECKBOXES;
-        ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
+        ModifyExtendedStyle(0, LVS_EX_CHECKBOXES);
     }
 
     // fix flickering headers

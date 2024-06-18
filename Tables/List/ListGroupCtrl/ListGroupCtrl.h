@@ -23,7 +23,7 @@
 /* Пример работы с классом:
 
     // отобрааем галочки
-    m_Tree.ModifyStyle(0, LVS_EX_CHECKBOXES);
+    m_Tree.ModifyExtendedStyle(0, LVS_EX_CHECKBOXES);
     // добавляем колонку
     m_Tree.InsertColumn(1, L"Название колонки", LVCFMT_CENTER, 100);
 
@@ -136,8 +136,9 @@ public:	//**********************************************************************
     // Add list of columns which will keep the size on resize control
     void SetProportionalResizingColumns(const std::unordered_set<int>& columns);
     //*********************************************************************************************
-    // меняем стиль таблицы LVS_EX_CHECKBOXES - чекбоксы
     BOOL ModifyStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd, _In_opt_ UINT nFlags = 0);
+    // меняем стиль таблицы LVS_EX_CHECKBOXES - чекбоксы
+    void ModifyExtendedStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd);
     //*********************************************************************************************
     // все элементы таблицы будут выбраны в зависимости от bCkeched
     void CheckAllElements(bool bChecked);
