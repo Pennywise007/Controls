@@ -35,7 +35,16 @@ public:
         ASSERT(windowInfoIt != instance.m_windowsInfo.end());
         windowInfoIt->second.callbacksByMessages[message].emplace(handler, std::move(callback));
     }
+    /// Call default window process of the window
+    static LRESULT CallDefaultWindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        DefaultWindowProc& instance = Instance();
+        if (auto it = instance.m_windowsInfo.find(hWnd); it != instance.m_windowsInfo.end())
+            return it->second.defaultWindowProc(hWnd, message, wParam, lParam);
 
+        return ::DefWindowProc(hWnd, message, wParam, lParam);
+    }
+    /// Remove callback from window message
     static void RemoveCallback(const CWnd& targetWindow, UINT message, const LPVOID handler)
     {
         DefaultWindowProc& instance = Instance();
