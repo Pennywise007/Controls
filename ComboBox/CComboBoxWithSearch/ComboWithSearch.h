@@ -51,8 +51,6 @@ private:
     bool m_allowCustomText = false;
     // Current control item selected by user in non m_allowCustomText mode
     int m_selectedItemIndex = -1;
-    // Current control text selected by user in m_allowCustomText mode
-    std::optional<CString> m_selectedCustomText;
     // Flag that we hiding dropdown window from internal functions
     bool m_internalHidingDropdown = false;
     // Control collors

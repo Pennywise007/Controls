@@ -90,7 +90,6 @@ HBRUSH ComboWithSearch::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 void ComboWithSearch::AllowCustomText(bool allow)
 {
     m_allowCustomText = allow;
-    m_selectedCustomText.reset();
 }
 
 //----------------------------------------------------------------------------//
@@ -121,15 +120,7 @@ void ComboWithSearch::SetDropdownBkColor(std::optional<COLORREF> color)
 //----------------------------------------------------------------------------//
 BOOL ComboWithSearch::OnCbnSelendok()
 {
-    if (m_allowCustomText)
-    {
-        m_selectedCustomText.emplace();
-        if (int currentSel = BaseCtrl::GetCurSel(); currentSel != -1)
-            GetLBText(currentSel, m_selectedCustomText.value());
-        else
-            GetWindowText(m_selectedCustomText.value());
-    }
-    else
+    if (!m_allowCustomText)
     {
         // если нет выбранной строки, но есть строки в списке
         // ставим выделение на первую существующую
@@ -150,16 +141,11 @@ BOOL ComboWithSearch::OnCbnSelendok()
     resetSearch();
     SetRedraw(TRUE);
 
-    if (m_selectedCustomText.has_value())
-    {
-        BaseCtrl::SetWindowText(m_selectedCustomText.value());
-        BaseCtrl::SetEditSel(0, m_selectedCustomText->GetLength());
-    }
-    else
+    if (!m_allowCustomText)
     {
         // восстанавливаем предыдущий выделенный элемент, делаем принудительно
         // потому что в поле может быть текст не соответствующий выделению(пустой например)
-        if (BaseCtrl::GetCurSel() == -1 && !m_allowCustomText)
+        if (BaseCtrl::GetCurSel() == -1)
             BaseCtrl::SetCurSel(m_selectedItemIndex != -1 ? m_selectedItemIndex : 0);
     }
     Invalidate();
@@ -174,6 +160,17 @@ BOOL ComboWithSearch::OnCbnSelendcancel()
     if (m_internalHidingDropdown)
         return TRUE;
 
+    CString customText;
+    DWORD customSelectionStart, customSelectionEnd;
+    if (m_allowCustomText)
+    {
+        // user might click on control or press esc to stop editing/hide drop down
+        GetWindowText(customText);
+        DWORD selection = BaseCtrl::GetEditSel();
+        customSelectionStart = LOWORD(selection);
+        customSelectionEnd = HIWORD(selection);
+    }
+
     SetRedraw(FALSE);
     // Hide dropdown to don`t show user if it is resized during filling items in resetSearch function
     m_internalHidingDropdown = true;
@@ -184,16 +181,16 @@ BOOL ComboWithSearch::OnCbnSelendcancel()
     resetSearch();
     SetRedraw(TRUE);
 
-    if (m_selectedCustomText.has_value())
+    if (m_allowCustomText)
     {
-        BaseCtrl::SetWindowText(m_selectedCustomText.value());
-        BaseCtrl::SetEditSel(0, m_selectedCustomText->GetLength());
+        BaseCtrl::SetWindowText(customText);
+        BaseCtrl::SetEditSel(customSelectionStart, customSelectionEnd);
     }
     else
     {
         // восстанавливаем предыдущий выделенный элемент, делаем принудительно
         // потому что в поле может быть текст не соответствующий выделению(пустой например)
-        if (m_selectedItemIndex != -1 && !m_allowCustomText)
+        if (m_selectedItemIndex != -1)
             BaseCtrl::SetCurSel(m_selectedItemIndex);
     }
     Invalidate();
@@ -390,17 +387,6 @@ void ComboWithSearch::updateRealCurSelFromCurrent()
     auto currentSel = BaseCtrl::GetCurSel();
     // получаем текущее значение выделения
     m_selectedItemIndex = convertToRealIndex(currentSel);
-
-    if (m_allowCustomText)
-    {
-        m_selectedCustomText.emplace();
-
-        if (currentSel != -1)
-            GetLBText(currentSel, m_selectedCustomText.value());
-        else
-           //m_selectedCustomText.reset();
-            GetWindowText(m_selectedCustomText.value());
-    }
 }
 
 //----------------------------------------------------------------------------//
