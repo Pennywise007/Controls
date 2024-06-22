@@ -233,6 +233,8 @@ void* CListGroupCtrl::GetItemDataPtr(int nIndex) const
 {
     ASSERT(nIndex < GetItemCount());
     ListItemData* itemData = (ListItemData*)CListCtrl::GetItemData(nIndex);
+    if (!itemData)
+        return nullptr;
     return itemData->userDataPtr;
 }
 
@@ -1410,6 +1412,7 @@ void CListGroupCtrl::OnLButtonDblClk(UINT nFlags, CPoint point)
 
 BOOL CListGroupCtrl::OnHeaderClick(NMHDR* pNMHDR, LRESULT* /*pResult*/)
 {
+    // We enable HDS_BUTTONS style for checkboxes and can receive clicks there
     if (GetStyle() & LVS_NOSORTHEADER)
         return true;
 
@@ -1430,6 +1433,9 @@ BOOL CListGroupCtrl::OnHeaderClick(NMHDR* pNMHDR, LRESULT* /*pResult*/)
             break;
         case SortType::eDescending:
             sortType = SortType::eNone;
+            break;
+        default:
+            ASSERT(false);
             break;
         }
     }
