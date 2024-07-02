@@ -442,9 +442,9 @@ void CListGroupCtrl::ResetSearch()
     FindItems(L"");
 }
 
-void CListGroupCtrl::SelectItem(int nItem, bool ensureVisible /*= true*/)
+void CListGroupCtrl::SelectItem(int nItem, bool ensureVisible /*= true*/, bool select /*= true*/)
 {
-    SetItemState(nItem, LVIS_SELECTED, LVIS_SELECTED);
+    SetItemState(nItem, select ? LVIS_SELECTED : 0, LVIS_SELECTED);
     if (ensureVisible)
         EnsureVisible(nItem, TRUE);
 }
