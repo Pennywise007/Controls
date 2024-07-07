@@ -12,9 +12,9 @@ void CTabControl::AutoResizeTabsToFitFullControlWidth(bool resize)
 {
     m_resizeTabsToFitFullControlWidth = resize;
 
-    ModifyStyle(0, TCS_FIXEDWIDTH);
-
-    layoutCurrentWindow();
+    ModifyStyle(m_resizeTabsToFitFullControlWidth ? 0 : TCS_FIXEDWIDTH,
+                m_resizeTabsToFitFullControlWidth ? TCS_FIXEDWIDTH : 0);
+    resizeTabs();
 }
 
 LONG CTabControl::AddTab(_In_z_ LPCTSTR lpszItem, _In_ const  std::shared_ptr<CWnd>& tabWindow)
@@ -56,7 +56,7 @@ LONG CTabControl::InsertTab(_In_ int nItem, _In_z_ LPCTSTR lpszItem, _In_ const 
 
 std::shared_ptr<CWnd> CTabControl::GetTabWindow(LONG index)
 {
-    ASSERT(index < (int)m_tabWindows.size());
+    ENSURE(index < (int)m_tabWindows.size());
     return *std::next(m_tabWindows.begin(), index);
 }
 
@@ -70,6 +70,7 @@ void CTabControl::OnSize(UINT nType, int cx, int cy)
     CTabCtrl::OnSize(nType, cx, cy);
 
     layoutCurrentWindow();
+    resizeTabs();
 }
 
 int CTabControl::GetCurSel() const
@@ -150,7 +151,7 @@ void CTabControl::layoutCurrentWindow()
     if (curSel == -1)
         return;
 
-    ASSERT(curSel < (int)m_tabWindows.size());
+    ENSURE(curSel < (int)m_tabWindows.size());
     auto window = *std::next(m_tabWindows.begin(), curSel);
 
     // рассчитываем позицию где должен быть диалог
@@ -164,19 +165,36 @@ void CTabControl::layoutCurrentWindow()
     clRc.right -= 2;
     clRc.bottom--;
 
-    window->MoveWindow(&clRc, TRUE);
+    window->MoveWindow(&clRc, TRUE);   
+}
 
+void CTabControl::resizeTabs()
+{
     if (m_resizeTabsToFitFullControlWidth)
     {
         CRect rectItem;
         if (GetItemRect(0, &rectItem))
         {
-            auto scrollHwnd = ::FindWindowEx(m_hWnd, NULL, UPDOWN_CLASS, NULL);
+            CRect clientRect;
+            CTabCtrl::GetClientRect(&clientRect);
 
+            constexpr int borderWidth = 1;
+            int tabWidth = (clientRect.Width() - borderWidth * 2) / CTabCtrl::GetItemCount();
+
+            bool scrollVisible = true;
+            // There is no clear way to determine if tab scroller is visible. We will get UPDOWN_CLASS
+            // scroller class and check if it is visible or not
             do
             {
-                SetItemSize(CSize((controlWidth - 2) / CTabCtrl::GetItemCount(), rectItem.Height()));
-            } while (scrollHwnd && ::IsWindowVisible(scrollHwnd) && (--controlWidth > 0));
+                SetItemSize(CSize(tabWidth, rectItem.Height()));
+
+                const auto scrollHwnd = ::FindWindowEx(m_hWnd, NULL, UPDOWN_CLASS, NULL);
+                if (const CWnd* scrollWnd = CWnd::FromHandle(scrollHwnd); scrollWnd)
+                    // IsWindowVisible doesn't work for some reason, we will check style
+                    scrollVisible = scrollWnd->GetStyle() & WS_VISIBLE;
+                else
+                    scrollVisible = false;
+            } while (scrollVisible && (--tabWidth > 0));
         }
     }
 }
