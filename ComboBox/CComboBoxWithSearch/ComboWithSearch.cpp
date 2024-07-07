@@ -254,8 +254,8 @@ void ComboWithSearch::executeSearch()
                                                       std::regex_constants::format_sed |
                                                       std::regex_constants::match_default).c_str();
                 // формируем строку поиска для регекса
-                regexStr.Replace(L"*", L".*?");
-                regexStr.Replace(L" ", L".*?");
+                regexStr.Replace(L"*", L".*");
+                regexStr.Replace(L" ", L".*");
 
                 const std::wregex xRegEx(regexStr, std::regex::icase);
 
