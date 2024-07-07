@@ -170,31 +170,31 @@ void CTabControl::layoutCurrentWindow()
 
 void CTabControl::resizeTabs()
 {
-    if (m_resizeTabsToFitFullControlWidth)
+    if (!m_resizeTabsToFitFullControlWidth)
+        return;
+
+    CRect rectItem;
+    if (!GetItemRect(0, &rectItem))
+        return;
+
+    CRect clientRect;
+    CTabCtrl::GetClientRect(&clientRect);
+
+    constexpr int borderWidth = 1;
+    int tabWidth = (clientRect.Width() - borderWidth * 2) / CTabCtrl::GetItemCount();
+
+    bool scrollVisible = true;
+    // There is no clear way to determine if tab scroller is visible. We will get UPDOWN_CLASS
+    // scroller class and check if it is visible or not
+    do
     {
-        CRect rectItem;
-        if (GetItemRect(0, &rectItem))
-        {
-            CRect clientRect;
-            CTabCtrl::GetClientRect(&clientRect);
+        SetItemSize(CSize(tabWidth, rectItem.Height()));
 
-            constexpr int borderWidth = 1;
-            int tabWidth = (clientRect.Width() - borderWidth * 2) / CTabCtrl::GetItemCount();
-
-            bool scrollVisible = true;
-            // There is no clear way to determine if tab scroller is visible. We will get UPDOWN_CLASS
-            // scroller class and check if it is visible or not
-            do
-            {
-                SetItemSize(CSize(tabWidth, rectItem.Height()));
-
-                const auto scrollHwnd = ::FindWindowEx(m_hWnd, NULL, UPDOWN_CLASS, NULL);
-                if (const CWnd* scrollWnd = CWnd::FromHandle(scrollHwnd); scrollWnd)
-                    // IsWindowVisible doesn't work for some reason, we will check style
-                    scrollVisible = scrollWnd->GetStyle() & WS_VISIBLE;
-                else
-                    scrollVisible = false;
-            } while (scrollVisible && (--tabWidth > 0));
-        }
-    }
+        const auto scrollHwnd = ::FindWindowEx(m_hWnd, NULL, UPDOWN_CLASS, NULL);
+        if (const CWnd* scrollWnd = CWnd::FromHandle(scrollHwnd); scrollWnd)
+            // IsWindowVisible doesn't work for some reason, we will check style
+            scrollVisible = scrollWnd->GetStyle() & WS_VISIBLE;
+        else
+            scrollVisible = false;
+    } while (scrollVisible && (--tabWidth > 0));
 }
