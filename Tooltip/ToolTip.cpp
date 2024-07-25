@@ -83,6 +83,29 @@ void CToolTip::SetTooltip(CWnd& wnd, const CString& text)
 
 void SetTooltip(CWnd& wnd, const CString& text)
 {
+	if (text.IsEmpty())
+	{
+		for (auto it = existingTooltips.begin(), end = existingTooltips.end(); it != end; ++it)
+		{
+			if (it->m_attachedWnd == &wnd)
+			{
+				it->DestroyWindow();
+				existingTooltips.erase(it);
+				break;
+			}
+		}
+		return;
+	}
+
+	for (auto it = existingTooltips.begin(), end = existingTooltips.end(); it != end; ++it)
+	{
+		if (it->m_attachedWnd == &wnd)
+		{
+			it->SetTooltip(wnd, text);
+			return;
+		}
+	}
+
 	auto& tooltip = existingTooltips.emplace_back(wnd, text);
 	DefaultWindowProc::OnWindowMessage(tooltip, WM_NCDESTROY, [](HWND hWnd, WPARAM wParam, LPARAM lParam, LRESULT& result)
 	{
@@ -92,6 +115,9 @@ void SetTooltip(CWnd& wnd, const CString& text)
 				continue;
 
 			DefaultWindowProc::RemoveCallback(*it, WM_NCDESTROY, &*it);
+			if (auto attachedTo = it->m_attachedWnd; !!attachedTo)
+				DefaultWindowProc::RemoveAnyMessageCallback(*attachedTo, &*it);
+
 			existingTooltips.erase(it);
 			break;
 		}

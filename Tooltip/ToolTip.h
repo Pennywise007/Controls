@@ -13,6 +13,9 @@
 
 namespace controls {
 
+// Adding tooltip without holding CToolTip object
+void SetTooltip(CWnd& wnd, const CString& text);
+
 class CToolTip : public ::CToolTipCtrl
 {
     DECLARE_MESSAGE_MAP()
@@ -24,11 +27,9 @@ public:
     void SetTooltip(CWnd& wnd, const CString& text);
 
 private:
+    friend void SetTooltip(CWnd& wnd, const CString& text);
+
     CWnd* m_attachedWnd = nullptr;
 };
-
-// Adding tooltip without holding CToolTip object
-// NOTE: don't call it for the same window
-void SetTooltip(CWnd& wnd, const CString& text);
 
 } // namespace controls
