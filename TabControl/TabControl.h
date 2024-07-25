@@ -54,6 +54,7 @@ public:
 private:
     // positions the currently active window in the client tab area
     void layoutCurrentWindow();
+    void resizeTabs();
 
     void onSelChanged();
 
