@@ -113,7 +113,7 @@ public:	//**********************************************************************
     void FindItems(_In_ std::list<CString> sFindStrings, _In_opt_ bool bMatchAll = false);
     void ResetSearch();
     //*********************************************************************************************
-    void SelectItem(int nItem, bool ensureVisible = true);
+    void SelectItem(int nItem, bool ensureVisible = true, bool select = true);
     int GetLastSelectedItem() const;
     std::vector<int> GetSelectedItems() const;
     void ClearSelection();
