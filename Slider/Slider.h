@@ -1,10 +1,11 @@
 ﻿#pragma once
 
 /*
-* Slider with two thumbs. Allow to select range, also shows hint of current value when moving slider
+* Slider with two thumbs. Allow to select range, also shows hint of current value when moving slider.
+* If you want to select range you need to set TBS_ENABLESELRANGE style
 * Example:
 
-CRangeSlider m_sliderRange;
+CSlider m_sliderRange;
 
 m_sliderRange.SetIncrementStep(1.);
 m_sliderRange.SetTooltipTextFormat(L"%.0lf");
@@ -23,13 +24,13 @@ void Dlg::OnTRBNThumbPosChangingSliderRangeSelector(NMHDR* pNMHDR, LRESULT* pRes
 
     switch (pNMTPC->nReason)
     {
-    case (int)CRangeSlider::TrackMode::TRACK_LEFT:
+    case (int)CSlider::TrackMode::TRACK_LEFT:
         // left slider pos = pNMTPC->dwPos
         break;
-    case (int)CRangeSlider::TrackMode::TRACK_RIGHT:
+    case (int)CSlider::TrackMode::TRACK_RIGHT:
         // right slider pos = pNMTPC->dwPos
         break;
-    case (int)CRangeSlider::TrackMode::TRACK_MIDDLE:
+    case (int)CSlider::TrackMode::TRACK_MIDDLE:
         // both slider pos = m_sliderRange.GetPositions();
         break;
     default:
@@ -53,7 +54,7 @@ void Dlg::OnTRBNThumbPosChangingSliderRangeSelector(NMHDR* pNMHDR, LRESULT* pRes
 /*
 * Slider with two thumbs. Allow to select range, also shows hint of current value when moving slider
 */
-class CRangeSlider : public CWnd
+class CSlider : public CWnd
 {
 public:
     enum class TrackMode {
@@ -91,7 +92,7 @@ protected:
     void PreSubclassWindow() override;
     afx_msg void OnPaint();
     afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
-    afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+    afx_msg void OnLButtonUp(UINT nFlags, CPoint point); 
     afx_msg void OnMouseMove(UINT nFlags, CPoint point);
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg UINT OnGetDlgCode();
@@ -101,8 +102,8 @@ protected:
     DECLARE_MESSAGE_MAP()
 
 private:
-    void OnPaintHorizontal(CDC& dc);
-    void OnPaintVertical(CDC& dc);
+    void OnPaintHorizontal(CDC& dc, CRect clientRect);
+    void OnPaintVertical(CDC& dc, CRect clientRect);
 
     double GetControlWidthInPixels() const;
 
@@ -116,7 +117,7 @@ private:
 
 private:
     std::optional<double> m_incrementStep;                      // increment step of moving thumb
-    std::pair<double, double> m_range = { 0, 100.};              // minimum and maximum positions for track bar
+    std::pair<double, double> m_range = { 0, 100.};             // minimum and maximum positions for track bar
     std::pair<double, double> m_thumbsPosition = m_range;       // thumb positions on track bar
     std::pair<CRect, CRect> m_thumbsRects;                      // rectangles of the Left and Right thumb
 

@@ -1,4 +1,4 @@
-#include "RangeSlider.h"
+#include "Slider.h"
 
 #include <afxwin.h>
 #include <algorithm>
@@ -7,9 +7,9 @@
 
 namespace {
 
-constexpr COLORREF thumbColor = RGB(143, 143, 143);
-constexpr COLORREF lineColor = RGB(157, 157, 157);
-constexpr COLORREF selectionColor = RGB(0, 120, 215);
+constexpr COLORREF kThumbColor = RGB(143, 143, 143);
+constexpr COLORREF kLineColor = RGB(157, 157, 157);
+constexpr COLORREF kSelectionColor = RGB(0, 120, 215);
 
 COLORREF darker(COLORREF Color, int Percent)
 {
@@ -35,7 +35,7 @@ _NODISCARD std::wstring get_string(const wchar_t* format, double value)
 }
 } // namespace
 
-BEGIN_MESSAGE_MAP(CRangeSlider, CWnd)
+BEGIN_MESSAGE_MAP(CSlider, CWnd)
     ON_WM_PAINT()
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONUP()
@@ -46,7 +46,7 @@ BEGIN_MESSAGE_MAP(CRangeSlider, CWnd)
     ON_WM_ERASEBKGND()
 END_MESSAGE_MAP()
 
-void CRangeSlider::OnPaint()
+void CSlider::OnPaint()
 {
     if (m_range.second - m_range.first == 0.)
     {
@@ -63,20 +63,24 @@ void CRangeSlider::OnPaint()
     else
         ASSERT(m_range.second >= m_thumbsPosition.first);
 
-    CPaintDC dc(this);
-
-    if (GetStyle() & TBS_VERT)
-        OnPaintVertical(dc);
-    else
-        OnPaintHorizontal(dc);
-}
-
-void CRangeSlider::OnPaintHorizontal(CDC& dc)
-{
-    ASSERT(!(GetStyle() & TBS_VERT));
-
     CRect clientRect;
     GetClientRect(&clientRect);
+
+    CPaintDC dcPaint(this);
+    CMemDC memDC(dcPaint, clientRect);
+    CDC& dc = memDC.GetDC();
+
+    DrawThemeParentBackground(m_hWnd, dc, &clientRect);
+
+    if (GetStyle() & TBS_VERT)
+        OnPaintVertical(dc, std::move(clientRect));
+    else
+        OnPaintHorizontal(dc, std::move(clientRect));
+}
+
+void CSlider::OnPaintHorizontal(CDC& dc, CRect clientRect)
+{
+    ASSERT(!(GetStyle() & TBS_VERT));
 
     dc.FillSolidRect(clientRect, GetSysColor(COLOR_3DFACE));
 
@@ -99,9 +103,11 @@ void CRangeSlider::OnPaintHorizontal(CDC& dc)
     if (m_lineWidth % 2 != 0)
         clientRect.bottom += 1;
 
+    auto selectionColor = IsWindowEnabled() ? kSelectionColor : kLineColor;
+
     if (GetStyle() & TBS_ENABLESELRANGE)
     {
-        dc.FillSolidRect(clientRect, lineColor);
+        dc.FillSolidRect(clientRect, kLineColor);
 
         clientRect.left = m_thumbsRects.first.right;
         clientRect.right = m_thumbsRects.second.left;
@@ -114,8 +120,8 @@ void CRangeSlider::OnPaintHorizontal(CDC& dc)
         m_thumbsRects.second.SetRectEmpty();
     }
     // draw thumbs
-    const CBrush thumbBrush(thumbColor);
-    const CBrush thumbBrushTracking(darker(thumbColor, 20));
+    const CBrush thumbBrush(kThumbColor);
+    const CBrush thumbBrushTracking(darker(kThumbColor, 20));
 
     dc.SelectStockObject(WHITE_PEN);
 
@@ -128,12 +134,9 @@ void CRangeSlider::OnPaintHorizontal(CDC& dc)
     dc.RoundRect(m_thumbsRects.first, CPoint(6, 6));
 }
 
-void CRangeSlider::OnPaintVertical(CDC& dc)
+void CSlider::OnPaintVertical(CDC& dc, CRect clientRect)
 {
     ASSERT((GetStyle() & TBS_VERT));
-
-    CRect clientRect;
-    GetClientRect(&clientRect);
 
     const auto height = clientRect.Width();
     const double width = GetControlWidthInPixels();
@@ -150,19 +153,24 @@ void CRangeSlider::OnPaintVertical(CDC& dc)
     if (m_lineWidth % 2 != 0)
         clientRect.right += 1;
 
-    dc.FillSolidRect(clientRect, lineColor);
-
+    auto selectionColor = IsWindowEnabled() ? kSelectionColor : kLineColor;
     if (GetStyle() & TBS_ENABLESELRANGE)
     {
+        dc.FillSolidRect(clientRect, kLineColor);
         clientRect.top = m_thumbsRects.first.bottom;
         clientRect.bottom = m_thumbsRects.second.top;
         clientRect.InflateRect(2, 1);
         dc.FillSolidRect(clientRect, selectionColor);
     }
+    else
+    {
+        dc.FillSolidRect(clientRect, selectionColor);
+        m_thumbsRects.second.SetRectEmpty();
+    }
 
     // draw thumbs
-    const CBrush thumbBrush(thumbColor);
-    const CBrush thumbBrushTracking(darker(thumbColor, 20));
+    const CBrush thumbBrush(kThumbColor);
+    const CBrush thumbBrushTracking(darker(kThumbColor, 20));
 
     dc.SelectStockObject(WHITE_PEN);
     dc.SelectObject((m_trackMode && m_trackMode != TrackMode::TRACK_RIGHT) ? thumbBrushTracking : thumbBrush);
@@ -171,7 +179,7 @@ void CRangeSlider::OnPaintVertical(CDC& dc)
     dc.RoundRect(m_thumbsRects.second, CPoint(6, 6));
 }
 
-double CRangeSlider::GetControlWidthInPixels() const
+double CSlider::GetControlWidthInPixels() const
 {
     CRect clientRect;
     GetClientRect(&clientRect);
@@ -185,44 +193,54 @@ double CRangeSlider::GetControlWidthInPixels() const
    return controlWidthInPixels;
 }
 
-void CRangeSlider::OnLButtonDown(UINT nFlags, CPoint point)
+void CSlider::OnLButtonDown(UINT nFlags, CPoint point)
 {
     SetFocus();
     Invalidate();
 
     if (!m_trackMode.has_value())
     {
-        if (m_thumbsRects.first.PtInRect(point))
+        if (GetStyle() & TBS_ENABLESELRANGE)
         {
-            m_trackMode = TrackMode::TRACK_LEFT;
-            m_clickOffsetFormThumbCenter = point - m_thumbsRects.first.CenterPoint();
+            if (m_thumbsRects.first.PtInRect(point))
+            {
+                m_trackMode = TrackMode::TRACK_LEFT;
+                m_clickOffsetFormThumbCenter = point - m_thumbsRects.first.CenterPoint();
 
-            ShowSliderTooltip(true, true);
-        }
-        else if (m_thumbsRects.second.PtInRect(point))
-        {
-            m_trackMode = TrackMode::TRACK_RIGHT;
-            m_clickOffsetFormThumbCenter = point - m_thumbsRects.second.CenterPoint();
-            ShowSliderTooltip(false, true);
+                ShowSliderTooltip(true, true);
+            }
+            else if (m_thumbsRects.second.PtInRect(point))
+            {
+                m_trackMode = TrackMode::TRACK_RIGHT;
+                m_clickOffsetFormThumbCenter = point - m_thumbsRects.second.CenterPoint();
+                ShowSliderTooltip(false, true);
+            }
+            else
+            {
+                CRect middleRect;
+                if (GetStyle() & TBS_VERT)
+                    middleRect = CRect(0, m_thumbsRects.first.bottom + 1, m_thumbsRects.first.right, m_thumbsRects.second.top - 1);
+                else
+                    middleRect = CRect(m_thumbsRects.first.right + 1, 0, m_thumbsRects.second.left - 1, m_thumbsRects.second.bottom);
+
+                if (middleRect.PtInRect(point))
+                {
+                    m_trackMode = TrackMode::TRACK_MIDDLE;
+                    m_clickOffsetFormThumbCenter = point - middleRect.CenterPoint();
+                }
+                else
+                {
+                    SetTimer(0, 700, nullptr);
+                    OnTimer(NULL);
+                }
+            }
         }
         else
         {
-            CRect middleRect;
-            if (GetStyle() & TBS_VERT)
-                middleRect = CRect(0, m_thumbsRects.first.bottom + 1, m_thumbsRects.first.right, m_thumbsRects.second.top - 1);
-            else
-                middleRect = CRect(m_thumbsRects.first.right + 1, 0, m_thumbsRects.second.left - 1, m_thumbsRects.second.bottom);
-
-            if (middleRect.PtInRect(point))
-            {
-                m_trackMode = TrackMode::TRACK_MIDDLE;
-                m_clickOffsetFormThumbCenter = point - middleRect.CenterPoint();
-            }
-            else
-            {
-                SetTimer(0, 700, nullptr);
-                OnTimer(NULL);
-            }
+            m_trackMode = TrackMode::TRACK_LEFT;
+            m_clickOffsetFormThumbCenter = {};
+            OnMouseMove(nFlags, point);
+            ShowSliderTooltip(true, true);
         }
 
         SetCapture();
@@ -230,7 +248,7 @@ void CRangeSlider::OnLButtonDown(UINT nFlags, CPoint point)
     CWnd::OnLButtonDown(nFlags, point);
 }
 
-void CRangeSlider::OnMouseMove(UINT nFlags, CPoint point)
+void CSlider::OnMouseMove(UINT nFlags, CPoint point)
 {
     if (m_trackMode.has_value())
     {
@@ -296,7 +314,7 @@ void CRangeSlider::OnMouseMove(UINT nFlags, CPoint point)
     CWnd::OnMouseMove(nFlags, point);
 }
 
-void CRangeSlider::OnLButtonUp(UINT nFlags, CPoint point)
+void CSlider::OnLButtonUp(UINT nFlags, CPoint point)
 {
     if (m_trackMode.has_value())
     {
@@ -313,7 +331,7 @@ void CRangeSlider::OnLButtonUp(UINT nFlags, CPoint point)
     CWnd::OnLButtonUp(nFlags, point);
 }
 
-void CRangeSlider::SetRange(_In_ std::pair<double, double> range, _In_ bool redraw)
+void CSlider::SetRange(_In_ std::pair<double, double> range, _In_ bool redraw)
 {
     ASSERT(range.first <= range.second);
     if (range.first > range.second)
@@ -326,17 +344,17 @@ void CRangeSlider::SetRange(_In_ std::pair<double, double> range, _In_ bool redr
         Invalidate();
 }
 
-std::pair<double, double> CRangeSlider::GetRange() const
+std::pair<double, double> CSlider::GetRange() const
 {
     return m_range;
 }
 
-void CRangeSlider::SetIncrementStep(double step)
+void CSlider::SetIncrementStep(double step)
 {
     m_incrementStep = step;
 }
 
-void CRangeSlider::SetPositions(_In_ std::pair<double, double> positions, _In_ bool redraw)
+void CSlider::SetPositions(_In_ std::pair<double, double> positions, _In_ bool redraw)
 {
     ASSERT(positions.first <= positions.second);
     if (positions.first > positions.second)
@@ -354,39 +372,39 @@ void CRangeSlider::SetPositions(_In_ std::pair<double, double> positions, _In_ b
         Invalidate();
 }
 
-std::pair<double, double> CRangeSlider::GetPositions() const
+std::pair<double, double> CSlider::GetPositions() const
 {
     return m_thumbsPosition;
 }
 
-void CRangeSlider::SetThumbWidth(_In_ unsigned width)
+void CSlider::SetThumbWidth(_In_ unsigned width)
 {
     m_thumbWidth = width;
     Invalidate();
 }
 
-unsigned CRangeSlider::GetThumbWidth() const
+unsigned CSlider::GetThumbWidth() const
 {
     return m_thumbWidth;
 }
 
-void CRangeSlider::SetLineWidth(_In_ unsigned width)
+void CSlider::SetLineWidth(_In_ unsigned width)
 {
     m_lineWidth = width;
     Invalidate();
 }
 
-unsigned CRangeSlider::GetLineWidth() const
+unsigned CSlider::GetLineWidth() const
 {
     return m_lineWidth;
 }
 
-void CRangeSlider::SetTooltipTextFormat(const wchar_t* format)
+void CSlider::SetTooltipTextFormat(const wchar_t* format)
 {
     m_tooltipFormat = format;
 }
 
-bool CRangeSlider::NormalizePositions()
+bool CSlider::NormalizePositions()
 {
     const auto previousThumbPositions = m_thumbsPosition;
     if (m_thumbsPosition.first < m_range.first)
@@ -412,7 +430,7 @@ bool CRangeSlider::NormalizePositions()
     return previousThumbPositions != m_thumbsPosition;
 }
 
-void CRangeSlider::SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const
+void CSlider::SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const
 { 
     ASSERT(previousThumbPositions != m_thumbsPosition);
 
@@ -420,17 +438,17 @@ void CRangeSlider::SendChangePositionEvent(const std::pair<double, double>& prev
     posChanging.hdr.hwndFrom = m_hWnd;
     posChanging.hdr.idFrom = GetWindowLong(m_hWnd, GWL_ID);
     posChanging.hdr.code = (UINT)TRBN_THUMBPOSCHANGING;
-    if (previousThumbPositions.first == m_thumbsPosition.first)
+    if (previousThumbPositions.second == m_thumbsPosition.second)
     {
-        posChanging.nReason = (int)TrackMode::TRACK_RIGHT;
-        posChanging.dwPos = (DWORD)m_thumbsPosition.second;
+        posChanging.nReason = (int)TrackMode::TRACK_LEFT;
+        posChanging.dwPos = (DWORD)m_thumbsPosition.first;
     }
-    else
+    else if (GetStyle() & TBS_ENABLESELRANGE)
     {
-        if (previousThumbPositions.second == m_thumbsPosition.second)
+        if (previousThumbPositions.first == m_thumbsPosition.first)
         {
-            posChanging.nReason = (int)TrackMode::TRACK_LEFT;
-            posChanging.dwPos = (DWORD)m_thumbsPosition.first;
+            posChanging.nReason = (int)TrackMode::TRACK_RIGHT;
+            posChanging.dwPos = (DWORD)m_thumbsPosition.second;
         }
         else
         {
@@ -438,12 +456,14 @@ void CRangeSlider::SendChangePositionEvent(const std::pair<double, double>& prev
             posChanging.dwPos = (DWORD)m_thumbsPosition.first; // changes in both thumbs
         }
     }
+    else
+        return;
 
     ::SendMessage(GetParent()->GetSafeHwnd(), GetStyle() & TBS_VERT ? WM_VSCROLL : WM_HSCROLL, posChanging.dwPos, NULL);
     ::SendMessage(GetParent()->GetSafeHwnd(), WM_NOTIFY, posChanging.hdr.idFrom, reinterpret_cast<LPARAM>(&posChanging));
 }
 
-void CRangeSlider::ShowSliderTooltip(bool left, bool createTip)
+void CSlider::ShowSliderTooltip(bool left, bool createTip)
 {
     CRect windowRect;
     GetWindowRect(&windowRect);
@@ -453,6 +473,7 @@ void CRangeSlider::ShowSliderTooltip(bool left, bool createTip)
     const double& sliderValue = left ? m_thumbsPosition.first : m_thumbsPosition.second;
 
     const LONG thumbDelta = left ? (LONG)m_thumbWidth * 2 / 3 : (LONG)m_thumbWidth * 4 / 3;
+    const CRect& thumbRect = left ? m_thumbsRects.first : m_thumbsRects.second;
 
     m_tooltip.SetLabel(get_string(m_tooltipFormat, sliderValue).c_str());
 
@@ -460,12 +481,14 @@ void CRangeSlider::ShowSliderTooltip(bool left, bool createTip)
     CRect toolWindowRect;
     if (GetStyle() & TBS_VERT)
     {
-        toolWindowRect = CRect({ windowRect.right - 1, windowRect.top + thumbDelta + (LONG)(abs(sliderValue - m_range.first) / countDataInOnePixel) }, windowSize);
+        toolWindowRect = CRect({ windowRect.right - 1, windowRect.top + thumbRect.CenterPoint().y }, windowSize);
         toolWindowRect.OffsetRect(0, -windowSize.cy / 2);
     }
     else
     {
-        toolWindowRect = CRect({ windowRect.left + thumbDelta + (LONG)(abs(sliderValue - m_range.first) / countDataInOnePixel), windowRect.top - 1 }, windowSize);
+        toolWindowRect = CRect({ windowRect.left + thumbRect.CenterPoint().x, windowRect.top - 1 }, windowSize);
+
+        //toolWindowRect = CRect({ windowRect.left + thumbDelta + (LONG)(abs(sliderValue - m_range.first) / countDataInOnePixel), windowRect.top - 1 }, windowSize);
         toolWindowRect.OffsetRect(-windowSize.cx / 2, -windowSize.cy);
     }
 
@@ -473,19 +496,19 @@ void CRangeSlider::ShowSliderTooltip(bool left, bool createTip)
                            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 }
 
-double CRangeSlider::ApplyIncrementStep(double oldValue, double newValue)
+double CSlider::ApplyIncrementStep(double oldValue, double newValue)
 {
     if (!m_incrementStep.has_value())
         return newValue;
     return oldValue + *m_incrementStep * round((newValue - oldValue) / *m_incrementStep);
 }
 
-UINT CRangeSlider::OnGetDlgCode()
+UINT CSlider::OnGetDlgCode()
 {
     return DLGC_WANTARROWS;
 }
 
-void CRangeSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
+void CSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 {
     CWnd::OnKeyDown(nChar, nRepCnt, nFlags);
 
@@ -544,7 +567,7 @@ void CRangeSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     }
 }
 
-void CRangeSlider::OnTimer(UINT_PTR nIDEvent)
+void CSlider::OnTimer(UINT_PTR nIDEvent)
 {
     CWnd::OnTimer(nIDEvent);
 
@@ -619,12 +642,12 @@ void CRangeSlider::OnTimer(UINT_PTR nIDEvent)
     }
 }
 
-BOOL CRangeSlider::OnEraseBkgnd(CDC* /*pDC*/)
+BOOL CSlider::OnEraseBkgnd(CDC* /*pDC*/)
 {
     return TRUE; // remove flickering
 }
 
-void CRangeSlider::PreSubclassWindow()
+void CSlider::PreSubclassWindow()
 {
     CWnd::PreSubclassWindow();
 
