@@ -1,25 +1,19 @@
 ﻿#include "Splitter.h"
 
-namespace {
+#include "../DefaultWindowProc.h"
 
-static CMap<HWND, HWND, CSplitter*, CSplitter*> g_wndSplitters;
-
-} // namespace
-
-CSplitter::AttachedWindowsSettings::AttachedWindowsSettings(CSplitter* splitter, HWND hWnd,
+CSplitter::AttachedWindowsSettings::AttachedWindowsSettings(CSplitter& splitter, CWnd& wndToAttach,
                                                             CMFCDynamicLayout::MoveSettings&& moveSettings,
                                                             CMFCDynamicLayout::SizeSettings&& sizeSettings)
-    : m_hWnd(hWnd)
+    : m_hWndToAttach(wndToAttach.m_hWnd)
     , m_moveSettings(std::move(moveSettings))
     , m_sizeSettings(std::move(sizeSettings))
 {
-    ::GetWindowRect(hWnd, m_initialWindowRect);
-    if (const HWND parent = ::GetParent(hWnd); parent && ::IsWindow(parent))
-        CWnd::FromHandle(parent)->ScreenToClient(m_initialWindowRect);
+    wndToAttach.GetClientRect(m_initialWindowRect);
 
     CRect sliderRect;
-    ::GetWindowRect(splitter->m_hWnd, sliderRect);
-    splitter->GetParent()->ScreenToClient(sliderRect);
+    splitter.GetWindowRect(sliderRect);
+    splitter.GetParent()->ScreenToClient(sliderRect);
     m_initialSlitterRect = sliderRect;
 }
 
@@ -35,32 +29,6 @@ void CSplitter::SetCallbacks(_In_opt_ const std::function<bool(CSplitter* splitt
     m_onEndDruggingSplitter = onEndDruggingSplitter;
 }
 
-void CSplitter::AttachWindow(HWND hWnd, CMFCDynamicLayout::MoveSettings moveSettings, CMFCDynamicLayout::SizeSettings sizeSettings)
-{
-    if (!hWnd || !::IsWindow(hWnd))
-    {
-        ASSERT(FALSE);
-        return;
-    }
-
-    const auto res = m_attachedWindowsSettings.try_emplace(hWnd, this, hWnd, std::move(moveSettings), std::move(sizeSettings));
-    ASSERT(res.second);
-}
-
-void CSplitter::DetachWindow(HWND hWnd)
-{
-    const auto it = m_attachedWindowsSettings.find(hWnd);
-    if (it != m_attachedWindowsSettings.end())
-        m_attachedWindowsSettings.erase(hWnd);
-    else
-        ASSERT(TRUE);
-}
-
-void CSplitter::ClearAttachedWindowsList()
-{
-    m_attachedWindowsSettings.clear();
-}
-
 BEGIN_MESSAGE_MAP(CSplitter, CWnd)
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONUP()
@@ -71,6 +39,7 @@ BEGIN_MESSAGE_MAP(CSplitter, CWnd)
     ON_WM_ERASEBKGND()
     ON_WM_SETCURSOR()
     ON_WM_NCCREATE()
+    ON_WM_DESTROY()
 END_MESSAGE_MAP()
 
 void CSplitter::OnLButtonDown(UINT nFlags, CPoint point)
@@ -92,28 +61,24 @@ void CSplitter::OnMouseMove(UINT nFlags, CPoint point)
 {
     if (m_drugStartMousePoint.has_value())
     {
-        CRect parentRect;
-        GetParent()->GetClientRect(parentRect);
-
-        // получаем местоположение кнопки
         CRect currentRect;
         GetWindowRect(currentRect);
         GetParent()->ScreenToClient(currentRect);
 
-        // рассчитываем на сколько перемещаем кнопку
-        CSize movingPosition(NULL, NULL);
+        // Calculate control moving offset
+        CSize movingOffset(NULL, NULL);
         switch (m_orientation)
         {
         case Orientation::eVertical:
-            movingPosition.cx = point.x - m_drugStartMousePoint->x;
+            movingOffset.cx = point.x - m_drugStartMousePoint->x;
             break;
         case Orientation::eHorizontal:
-            movingPosition.cy = point.y - m_drugStartMousePoint->y;
+            movingOffset.cy = point.y - m_drugStartMousePoint->y;
             break;
         }
 
         CRect newPosition(currentRect);
-        newPosition.OffsetRect(movingPosition);
+        newPosition.OffsetRect(movingOffset);
 
         ApplyNewRect(newPosition, currentRect);
     }
@@ -187,15 +152,17 @@ void CSplitter::ApplyNewRect(CRect& newRect, std::optional<CRect> currentRect)
     //CWnd::RedrawWindow(); // fix drawing lag
 }
 
-void CSplitter::AttachSplitterToWindow(HWND hWnd, CMFCDynamicLayout::MoveSettings moveSettings, CMFCDynamicLayout::SizeSettings sizeSettings)
+void CSplitter::AttachSplitterToWindow(CWnd& wnd, CMFCDynamicLayout::MoveSettings moveSettings, CMFCDynamicLayout::SizeSettings sizeSettings)
 {
     UnhookFromAttachedWindow();
 
-    m_splitterLayoutSettings.emplace(this, hWnd, std::move(moveSettings), std::move(sizeSettings));
-    ::GetClientRect(hWnd, m_splitterLayoutSettings->m_initialWindowRect);
+    m_splitterLayoutSettings.emplace(*this, wnd, std::move(moveSettings), std::move(sizeSettings));
 
-    g_wndSplitters.SetAt(hWnd, this);
-    m_pfnWndProc = (WNDPROC)::SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WindowProc);
+    DefaultWindowProc::OnWindowMessage(wnd, WM_SIZE,
+        [&](HWND hWnd, WPARAM wParam, LPARAM lParam, LRESULT& result)
+        {
+            OnAttachedWindowSizeChanged(LOWORD(lParam), HIWORD(lParam));
+        }, this);
 }
 
 void CSplitter::UnhookFromAttachedWindow()
@@ -203,8 +170,7 @@ void CSplitter::UnhookFromAttachedWindow()
     if (!m_splitterLayoutSettings.has_value())
         return;
 
-    ::SetWindowLongPtr(m_splitterLayoutSettings->m_hWnd, GWLP_WNDPROC, (LONG_PTR)m_pfnWndProc);
-    g_wndSplitters.RemoveKey(m_splitterLayoutSettings->m_hWnd);
+    DefaultWindowProc::RemoveCallback(*CWnd::FromHandle(m_splitterLayoutSettings->m_hWndToAttach), WM_SIZE, this);
     m_splitterLayoutSettings.reset();
 }
 
@@ -227,24 +193,6 @@ void CSplitter::ApplyLayout(CRect& rect, const AttachedWindowsSettings& settings
 
     rect.right += (LONG)std::round((double)positionDiff.cx * settings.m_sizeSettings.m_nXRatio / 100.);
     rect.bottom += (LONG)std::round((double)positionDiff.cy * settings.m_sizeSettings.m_nYRatio / 100.);
-}
-
-LRESULT CSplitter::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    CSplitter* splitter = nullptr;
-    g_wndSplitters.Lookup(hWnd, splitter);
-    ASSERT(splitter != NULL);
-
-    switch (uMsg)
-    {
-    case WM_SIZE:
-        splitter->OnAttachedWindowSizeChanged(LOWORD(lParam), HIWORD(lParam));
-        break;
-    default:
-        break;
-    }
-
-    return ::CallWindowProc(splitter->m_pfnWndProc, hWnd, uMsg, wParam, lParam);
 }
 
 void CSplitter::OnPaint()
@@ -299,17 +247,7 @@ void CSplitter::OnWindowPosChanged(WINDOWPOS* lpwndpos)
     if (!m_movingWithParentBounds && m_splitterLayoutSettings.has_value())
     {
         m_splitterLayoutSettings->m_initialSlitterRect = currentRect;
-        ::GetClientRect(m_splitterLayoutSettings->m_hWnd, m_splitterLayoutSettings->m_initialWindowRect);
-    }
-
-    const CPoint currentPoint = currentRect.CenterPoint();
-    for (auto&& [hWnd, settings] : m_attachedWindowsSettings)
-    {
-        const CPoint def = currentPoint - settings.m_initialSlitterRect.CenterPoint();
-
-        currentRect = settings.m_initialWindowRect;
-        ApplyLayout(currentRect, settings, CSize(def.x, def.y));
-        ::MoveWindow(hWnd, currentRect.left, currentRect.top, currentRect.Width(), currentRect.Height(), TRUE);
+        ::GetClientRect(m_splitterLayoutSettings->m_hWndToAttach, m_splitterLayoutSettings->m_initialWindowRect);
     }
 }
 
@@ -378,4 +316,10 @@ BOOL CSplitter::OnNcCreate(LPCREATESTRUCT lpCreateStruct)
     lpCreateStruct->style &= ~WS_BORDER;
 
     return TRUE;
+}
+
+void CSplitter::OnDestroy()
+{
+    CWnd::OnDestroy();
+    UnhookFromAttachedWindow();
 }
