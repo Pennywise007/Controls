@@ -116,7 +116,7 @@ public:
         auto handlerCallbackIt = windowInfoIt->second.anyMessagesCallbacks.find(handler);
         if (handlerCallbackIt == windowInfoIt->second.anyMessagesCallbacks.end())
         {
-            // this handler hasn`t subscribed to events yet
+            // this handler hasn`t been subscribed to events yet
             ASSERT(FALSE);
             return;
         }
