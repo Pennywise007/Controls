@@ -54,8 +54,8 @@ public: // anchoring controls
     /// <param name="anchoredSides">Sides of anchored window</param>
     /// <param name="anchorTargetSide">Target side for anchoring another window</param>
     /// <param name="ratio">1-100, aspect ratio when changing sides of anchoring window</param>
-    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio);
-    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio);
+    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, int ratio);
+    static void AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, int ratio);
     static void AnchorRemove(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& removingAnchoredForSides = AllAnchorSides);
 
 public: // setting control moving and sizing bounds
@@ -103,7 +103,7 @@ private:    // anchors
             // side of target window for applying window anchors
             AnchorSide anchorSide;
             // ratio for moving sides on anchors
-            unsigned ratio;
+            int ratio;
             // initial window rect for anchored window
             CRect initialWindowRect;
             // initial rect of target window

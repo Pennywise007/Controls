@@ -25,7 +25,7 @@ void Layout::CheckNecessityToHandleOnSizeChangedEvent(const CWnd& window)
     }
 }
 
-void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio)
+void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSides&& anchoredSides, AnchorSide anchorTargetSide, int ratio)
 {
     ASSERT(::IsWindow(who));
     ASSERT(anchoredSides.any());
@@ -46,7 +46,7 @@ void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSid
         }, reinterpret_cast<LPVOID>(&anchor));
 }
 
-void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, unsigned ratio)
+void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, const std::initializer_list<AnchorSide>& anchoredSides, AnchorSide anchorTargetSide, int ratio)
 {
     if (ratio == 0)
         return AnchorRemove(who, anchorTarget, anchoredSides);
@@ -274,10 +274,10 @@ void Layout::OnWindowPosChanged(HWND hWnd, WPARAM /*wParam*/, LPARAM lParam)
         {
             /* ::SetWindowPos(attachedHwnd, HWND_TOP, newRect.left, newRect.top,
                             newRect.Width(), newRect.Height(),
-                            SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE | SWP_NOCOPYBITS);*/
+                            SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE);*/
             ::DeferWindowPos(hDWP, attachedHwnd, HWND_TOP, newRect.left, newRect.top,
                              newRect.Width(), newRect.Height(),
-                             SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+                             SWP_NOZORDER | SWP_NOREPOSITION | SWP_NOACTIVATE);
         }
     }
 
