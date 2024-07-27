@@ -71,12 +71,10 @@ CIconButton::CIconButton()
     , m_lOffset				(5)
     , m_bNeedCalcTextPos	(true)
     , m_bUseCustomBkColor	(false)
-    , m_ptooltip            (std::make_unique<CToolTipCtrl>())
 {
     m_TextColor = GetSysColor(COLOR_BTNTEXT);
     m_BkColor	= GetSysColor(COLOR_BTNFACE);
 }
-
 
 BEGIN_MESSAGE_MAP(CIconButton, CButton)
     ON_NOTIFY_REFLECT(NM_CUSTOMDRAW, &CIconButton::OnNMCustomdraw)
@@ -365,9 +363,6 @@ void CIconButton::PreSubclassWindow()
 
     GetClientRect(m_TextRect);
 
-//	m_ptooltip->Create(this);
-    //m_ptooltip->Activate(1);
-
     CButton::PreSubclassWindow();
 }
 
@@ -400,15 +395,4 @@ void CIconButton::UseDefaultBkColor(_In_opt_ bool bUseStandart /*= true*/)
 {
     m_bUseCustomBkColor = !bUseStandart;
     Invalidate();
-}
-
-BOOL CIconButton::PreTranslateMessage(MSG* pMsg)
-{
-    //m_ptooltip->RelayEvent(pMsg);
-    return CButton::PreTranslateMessage(pMsg);
-}
-
-void CIconButton::SetTooltip(_In_ CString Tooltip)
-{
-    m_ptooltip->AddTool(this, Tooltip);
 }
