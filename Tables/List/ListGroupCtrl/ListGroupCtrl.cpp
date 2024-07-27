@@ -1571,10 +1571,6 @@ void CListGroupCtrl::PreSubclassWindow()
     {
         ModifyExtendedStyle(0, LVS_EX_CHECKBOXES);
     }
-
-    // fix flickering headers
-	// Commented because it causing probems with resizing with AutoScaleColumns
-    //CListCtrl::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
 }
 
 bool CListGroupCtrl::FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive /*= false*/)
@@ -1724,8 +1720,14 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
 {
     CListCtrl::OnSize(nType, cx, cy);
 
+    // During resizing we scroll can appear and we will receive OnSize again, add this check to avoid loops
+    if (m_resizingColumns)
+        return;
+
     if (!m_columnsProportions.empty())
     {
+        m_resizingColumns = true;
+
         int controlWidth = cx;
         const auto columnsCount = GetHeaderCtrl()->GetItemCount();
         for (int column = 0; column < columnsCount; ++column)
@@ -1737,21 +1739,31 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
         if (controlWidth < 0)
             controlWidth = 0;
 
+        static const int vertScrollWidth = GetSystemMetrics(SM_CXVSCROLL);
+
         // Sometimes scroll lagging and we can't predict it
-        do
+        for (int i = 0; i < vertScrollWidth; ++i)
         {
             for (auto&& [columnIndex, proportion] : m_columnsProportions)
             {
                 SetColumnWidth(columnIndex, static_cast<int>((double)controlWidth / proportion));
             }
-        } while ((GetWindowLong(m_hWnd, GWL_STYLE) & WS_HSCROLL) && --controlWidth > 0);
 
-        // Forcing redraw to fix problem:
-        // Control full with data and has a vertical scroll. After increasing control size at
-        // the moment when scroll dissapears control becomes empty
-        RedrawWindow();
-        RedrawItems(0, GetItemCount());
+            if (!(GetWindowLong(m_hWnd, GWL_STYLE) & WS_HSCROLL))
+                break;
+
+            --controlWidth;
+        }
+
+        m_resizingColumns = false;
     }
+
+    // Forcing redraw to fix problems:
+    // - Flickering control data on resize
+    // - Control full with data and has a vertical scroll. After increasing control size at
+    //   the moment when scroll dissapears control becomes empty
+    RedrawWindow();
+    RedrawItems(0, GetItemCount());
 }
 
 BOOL CListGroupCtrl::OnEraseBkgnd(CDC* pDC)

@@ -58,6 +58,7 @@
 //*************************************************************************************************
 class CListGroupCtrl : public CListCtrl
 {
+protected:
     // Store items real index(with which it was inserted)
     void SetDefaultItemIndex(int nCurrentItem, int nRealItem);
     // Use SetItemDataPtr and GetItemDataPtr
@@ -252,7 +253,8 @@ protected://********************************************************************
     std::list<CString> m_sFindStrings;
     // список функций для сортировки каждой колонки
     std::vector<std::pair<int, std::function<int(CString, CString)>>> m_SortFunct;
-
+    // flag that we resize columns right now
+    bool m_resizingColumns = false;
     // list of columns widths, on resizing control all columns will be resize proportionally initial width
     // @see SetProportionalResizingColumns
     std::unordered_map<int, double> m_columnsProportions;

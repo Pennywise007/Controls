@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#define NOMINMAX
-
 #include <afxtoolbarimages.h>
 #include <bitset>
 #include <cassert>
@@ -108,25 +106,25 @@ SetButton(int index, int iSubItem)
 
             if (pNMCD->nmcd.uItemState & ODS_DISABLED)
                 buttonState = PBS_DISABLED;
-            else if (Control::m_state.test(State::eLButtonDown))
+            else if (Control::m_state.test(Control::State::eLButtonDown))
                 buttonState = PBS_PRESSED;
             else if (pNMCD->nmcd.uItemState & ODS_HOTLIGHT ||
-                     Control::m_state.test(State::eHovered))
+                     Control::m_state.test(Control::State::eHovered))
                 buttonState = PBS_HOT;
 
             // Рисуем фон хидера и получаем внутренний размер
-            VERIFY(SUCCEEDED(::DrawThemeBackground(m_hTheme, pNMCD->nmcd.hdc, buttonType,
+            VERIFY(SUCCEEDED(::DrawThemeBackground(Control::m_hTheme, pNMCD->nmcd.hdc, buttonType,
                                                    buttonState, &pNMCD->nmcd.rc, 0)));
-            VERIFY(SUCCEEDED(::DrawThemeText(m_hTheme, pNMCD->nmcd.hdc, buttonType,
+            VERIFY(SUCCEEDED(::DrawThemeText(Control::m_hTheme, pNMCD->nmcd.hdc, buttonType,
                                              buttonState, text.GetString(), text.GetLength(),
                                              DT_CENTER | DT_VCENTER, 0, &pNMCD->nmcd.rc)));
         }
         void OnLButtonUp(int iItem, int iSubItem, CallbacksHolder& callbacks) noexcept override
         {
-            if (iItem == m_iItem && iSubItem == m_iSubItem)
+            if (iItem == Control::m_iItem && iSubItem == Control::m_iSubItem)
             {
                 if (callbacks.buttonPressedCallback)
-                    callbacks.buttonPressedCallback(m_iItem, m_iSubItem);
+                    callbacks.buttonPressedCallback(Control::m_iItem, Control::m_iSubItem);
                 else
                     ASSERT(false);
             }
@@ -155,24 +153,24 @@ SetCheckbox(int index, int iSubItem, bool enabled)
 
             if (pNMCD->nmcd.uItemState & ODS_DISABLED)
                 buttonState = m_state ? CBS_CHECKEDDISABLED : CBS_UNCHECKEDDISABLED;
-            else if (Control::m_state.test(State::eLButtonDown))
+            else if (Control::m_state.test(Control::State::eLButtonDown))
                 buttonState = m_state ? CBS_CHECKEDPRESSED : CBS_UNCHECKEDPRESSED;
             else if (pNMCD->nmcd.uItemState & ODS_HOTLIGHT ||
-                     Control::m_state.test(State::eHovered))
+                     Control::m_state.test(Control::State::eHovered))
                 buttonState = m_state ? CBS_CHECKEDHOT : CBS_UNCHECKEDHOT;
 
             auto rect = pNMCD->nmcd.rc;
             --rect.bottom; // fix for checkbox size
-            VERIFY(SUCCEEDED(::DrawThemeBackground(m_hTheme, pNMCD->nmcd.hdc, buttonType,
+            VERIFY(SUCCEEDED(::DrawThemeBackground(Control::m_hTheme, pNMCD->nmcd.hdc, buttonType,
                                                    buttonState, &rect, 0)));
         }
         void OnLButtonUp(int iItem, int iSubItem, CallbacksHolder& callbacks) noexcept override
         {
-            if (iItem == m_iItem && iSubItem == m_iSubItem)
+            if (iItem == Control::m_iItem && iSubItem == Control::m_iSubItem)
             {
                 m_state = !m_state;
                 if (callbacks.checkboxStateChangedCallback)
-                    callbacks.checkboxStateChangedCallback(m_iItem, m_iSubItem, m_state);
+                    callbacks.checkboxStateChangedCallback(Control::m_iItem, Control::m_iSubItem, m_state);
                 else
                     ASSERT(false);
             }
@@ -211,10 +209,10 @@ SetImage(int index, int iSubItem, CBitmap& hBitmap, LONG imageWidth, LONG imageH
 
             if (pNMCD->nmcd.uItemState & ODS_DISABLED)
                 state = LISTITEMSTATES::LISS_DISABLED;
-            else if (Control::m_state.test(State::eLButtonDown))
+            else if (Control::m_state.test(Control::State::eLButtonDown))
                 state = LISTITEMSTATES::LISS_HOTSELECTED;
             else if (pNMCD->nmcd.uItemState & ODS_HOTLIGHT ||
-                     Control::m_state.test(State::eHovered))
+                     Control::m_state.test(Control::State::eHovered))
                 state = LISTITEMSTATES::LISS_HOT;
 
             auto* pDC = CDC::FromHandle(pNMCD->nmcd.hdc);
@@ -234,10 +232,10 @@ SetImage(int index, int iSubItem, CBitmap& hBitmap, LONG imageWidth, LONG imageH
         }
         void OnLButtonUp(int iItem, int iSubItem, CallbacksHolder& callbacks) noexcept override
         {
-            if (iItem == m_iItem && iSubItem == m_iSubItem)
+            if (iItem == Control::m_iItem && iSubItem == Control::m_iSubItem)
             {
                 if (callbacks.buttonPressedCallback)
-                    callbacks.buttonPressedCallback(m_iItem, m_iSubItem);
+                    callbacks.buttonPressedCallback(Control::m_iItem, Control::m_iSubItem);
                 else
                     ASSERT(false);
             }
@@ -255,10 +253,11 @@ SetImage(int index, int iSubItem, CBitmap& hBitmap, LONG imageWidth, LONG imageH
 template <typename CBaseList>
 void SubItemsControls<CBaseList>::SetCheckboxColumn(int iColumnIndex)
 {
-    if (const auto curStyle = GetExtendedStyle(); !(curStyle & LVS_EX_CHECKBOXES))
-        CBaseList::SetExtendedStyle(CBaseList::GetExtendedStyle() & LVS_EX_CHECKBOXES);
+    CBaseList::ModifyExtendedStyle(0, LVS_EX_CHECKBOXES);
+    // fix checkboxes lag during control resize
+    CBaseList::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
 
-    CHeaderCtrl* header = GetHeaderCtrl();
+    CHeaderCtrl* header = CBaseList::GetHeaderCtrl();
     HDITEM hdi = { 0 };
     hdi.mask = HDI_FORMAT;
     Header_GetItem(*header, iColumnIndex, &hdi);
@@ -291,7 +290,7 @@ RemoveControl(int index, int iSubItem)
         m_controls.erase(lineIt);
 
     if (checkBox)
-        SetItemText(index, iSubItem, L"");
+        CBaseList::SetItemText(index, iSubItem, L"");
 }
 
 template<typename CBaseList>

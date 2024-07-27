@@ -262,7 +262,7 @@ inline void Customizer<CBaseList>::SetMutilineHeader(bool multiline)
         m_HeaderCtrl.SetFont(&m_NewHeaderFont);
     }
     else
-        m_HeaderCtrl.SetFont(GetFont());
+        m_HeaderCtrl.SetFont(CBaseList::GetFont());
 }
 
 template<typename CBaseList>
@@ -311,12 +311,12 @@ void Customizer<CBaseList>::PreSubclassWindow()
 {
     CBaseList::PreSubclassWindow();
 
-    CHeaderCtrl* pHeader = GetHeaderCtrl();
+    CHeaderCtrl* pHeader = CBaseList::GetHeaderCtrl();
     if (pHeader == NULL)
         return;
 
     VERIFY(m_HeaderCtrl.SubclassWindow(pHeader->m_hWnd));
-    m_HeaderCtrl.SetRealFont(GetFont());
+    m_HeaderCtrl.SetRealFont(CBaseList::GetFont());
 
     HDITEM hdItem;
     hdItem.mask = HDI_FORMAT;
@@ -378,7 +378,7 @@ BOOL Customizer<CBaseList>::OnNMCustomdraw(NMHDR* pNMHDR, LRESULT* pResult)
             const DWORD iItem = pNMCD->nmcd.dwItemSpec;
             const DWORD iSubItem = pNMCD->iSubItem;
 
-            if (GetItemState(iItem, LVIS_SELECTED) == LVIS_SELECTED)
+            if (CBaseList::GetItemState(iItem, LVIS_SELECTED) == LVIS_SELECTED)
                 break;
 
             const auto* itemInfo = m_subItemInfo.Get(CBaseList::GetItemData(iItem), iSubItem);
@@ -446,7 +446,7 @@ inline INT_PTR Customizer<CBaseList>::OnToolHitTest(CPoint point, TOOLINFO* pTI)
             lstrcpyn(pTI->lpszText, tooltip, tooltip.GetLength() + 1);
             //pTI->lpszText = LPSTR_TEXTCALLBACK;
 
-            pTI->hwnd = m_hWnd;
+            pTI->hwnd = CBaseList::m_hWnd;
             pTI->uId = (UINT)((currentItem<<10)+(hti.iSubItem&0x3ff)+1);
 
             CRect cellRect;
