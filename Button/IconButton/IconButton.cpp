@@ -207,46 +207,50 @@ void CIconButton::OnNMCustomdraw(NMHDR *pNMHDR, LRESULT *pResult)
         CButton::SetWindowText(CString());
     }
 
-    if (m_bUseCustomBkColor)
+    if (m_bUseCustomBkColor || m_drawCustomButtonBackground)
     {
         HBRUSH TempBrush;
         HPEN TempPen;
 
-        // задний фон кнопки
+        // Fill background
         TempBrush = CreateSolidBrush(GetSysColor(COLOR_3DFACE));
         FillRect(pNMCD->hdc, &pNMCD->rc, TempBrush);
         DeleteObject(TempBrush);
 
-        // задание цвета границы кнопки (оконтовки)
-        TempPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_ACTIVEBORDER));
-
         if (pNMCD->uItemState & ODS_DISABLED)
-            TempBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+        {
+            // Disabled state
+            TempPen = CreatePen(PS_SOLID, 1, RGB(233, 233, 233));
+            TempBrush = CreateSolidBrush(RGB(249, 249, 249));
+        }
         else
         {
             if (pNMCD->uItemState & ODS_HOTLIGHT)
             {
                 if (pNMCD->uItemState & ODS_SELECTED)
                 {
-                    // выбор мышкой
-                    DeleteObject(TempPen);
-                    TempPen = CreatePen(PS_SOLID, 1, RGB(44, 98, 139));
-
-                    TempBrush = m_bUseCustomBkColor ? CreateSolidBrush(Darker(m_BkColor, 20)) :
-                        CreateGradientBrush(RGB(216, 238, 250), RGB(140, 202, 235), pNMCD);
+                    // Pressed state
+                    TempPen = CreatePen(PS_SOLID, 1, RGB(0, 84, 153));
+                    TempBrush = m_bUseCustomBkColor ? 
+                        CreateSolidBrush(Darker(m_BkColor, 20)) :
+                        CreateSolidBrush(RGB(204, 228, 247));
                 }
                 else
                 {
-                    // перемещении мыши над контролом
-                    TempBrush = m_bUseCustomBkColor ? CreateSolidBrush(Lighter(m_BkColor, 20)) :
-                        CreateGradientBrush(RGB(230, 245, 253), RGB(172, 220, 247), pNMCD);
+                    // Hovered state
+                    TempPen = CreatePen(PS_SOLID, 1, RGB(0, 120, 212));
+                    TempBrush = m_bUseCustomBkColor ?
+                        CreateSolidBrush(Lighter(m_BkColor, 20)) :
+                        CreateSolidBrush(RGB(224, 238, 249));
                 }
             }
             else
             {
-                // стандартное состо€ние контрола
-                TempBrush = m_bUseCustomBkColor ? CreateSolidBrush(m_BkColor) :
-                    CreateGradientBrush(GetSysColor(COLOR_BTNFACE), RGB(216, 216, 216), pNMCD);
+                // Normal state
+                TempPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_ACTIVEBORDER));
+                TempBrush = m_bUseCustomBkColor ? 
+                    CreateSolidBrush(m_BkColor) : 
+                    CreateSolidBrush(RGB(253, 253, 253));
             }
         }
 
@@ -394,5 +398,11 @@ void CIconButton::SetBkColor(_In_ COLORREF BkColor)
 void CIconButton::UseDefaultBkColor(_In_opt_ bool bUseStandart /*= true*/)
 {
     m_bUseCustomBkColor = !bUseStandart;
+    Invalidate();
+}
+
+void CIconButton::UseCustomBackgroundDraw(bool use)
+{
+    m_drawCustomButtonBackground = use;
     Invalidate();
 }

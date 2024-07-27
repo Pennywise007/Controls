@@ -50,6 +50,7 @@ public:	//**********************************************************************
     void SetBkColor		(_In_ COLORREF BkColor);	// установка фона для кнопки
     // установка флага использования стандартного фона или заданного пользователем
     void UseDefaultBkColor(_In_opt_ bool bUseStandart = true);
+    void UseCustomBackgroundDraw(bool use);
 protected://***************************************************************************************
     void RepositionItems();		// масштабируем рабочие области кнопки
 protected://***************************************************************************************
@@ -58,6 +59,7 @@ protected://********************************************************************
     Alignment m_Alignment;		// привязка кнопки
     CMFCToolBarImages m_image;  // иконка
     //*********************************************************************************************
+    bool m_drawCustomButtonBackground = false; // Draw custom button background
     bool m_bUseCustomBkColor;	// флаг использования пользовательского фона для кнокпи
     COLORREF m_TextColor;		// цвет текста
     COLORREF m_BkColor;			// цвет фона
