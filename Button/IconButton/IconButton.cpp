@@ -217,41 +217,48 @@ void CIconButton::OnNMCustomdraw(NMHDR *pNMHDR, LRESULT *pResult)
         FillRect(pNMCD->hdc, &pNMCD->rc, TempBrush);
         DeleteObject(TempBrush);
 
-        if (pNMCD->uItemState & ODS_DISABLED)
+        if (GetCheck() == BST_CHECKED && GetStyle() & BS_PUSHLIKE)
+        {
+            // Pressed state
+            TempPen = CreatePen(PS_SOLID, 1, RGB(0, 84, 153));
+            TempBrush = m_bUseCustomBkColor ?
+                CreateSolidBrush(Darker(m_BkColor, 20)) :
+                CreateSolidBrush(RGB(204, 228, 247));
+        }
+        else if (pNMCD->uItemState & ODS_DISABLED)
         {
             // Disabled state
             TempPen = CreatePen(PS_SOLID, 1, RGB(233, 233, 233));
             TempBrush = CreateSolidBrush(RGB(249, 249, 249));
         }
-        else
+        else if (pNMCD->uItemState & ODS_HOTLIGHT)
         {
-            if (pNMCD->uItemState & ODS_HOTLIGHT)
+            if (pNMCD->uItemState & ODS_SELECTED)
             {
-                if (pNMCD->uItemState & ODS_SELECTED)
-                {
-                    // Pressed state
-                    TempPen = CreatePen(PS_SOLID, 1, RGB(0, 84, 153));
-                    TempBrush = m_bUseCustomBkColor ? 
-                        CreateSolidBrush(Darker(m_BkColor, 20)) :
-                        CreateSolidBrush(RGB(204, 228, 247));
-                }
-                else
-                {
-                    // Hovered state
-                    TempPen = CreatePen(PS_SOLID, 1, RGB(0, 120, 212));
-                    TempBrush = m_bUseCustomBkColor ?
-                        CreateSolidBrush(Lighter(m_BkColor, 20)) :
-                        CreateSolidBrush(RGB(224, 238, 249));
-                }
+                // Pressed state
+                TempPen = CreatePen(PS_SOLID, 1, RGB(0, 84, 153));
+                TempBrush = m_bUseCustomBkColor ? 
+                    CreateSolidBrush(Darker(m_BkColor, 20)) :
+                    CreateSolidBrush(RGB(204, 228, 247));
             }
             else
             {
-                // Normal state
-                TempPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_ACTIVEBORDER));
-                TempBrush = m_bUseCustomBkColor ? 
-                    CreateSolidBrush(m_BkColor) : 
-                    CreateSolidBrush(RGB(253, 253, 253));
+                // Hovered state
+                TempPen = CreatePen(PS_SOLID, 1, RGB(0, 120, 212));
+                TempBrush = m_bUseCustomBkColor ?
+                    CreateSolidBrush(Lighter(m_BkColor, 20)) :
+                    CreateSolidBrush(RGB(224, 238, 249));
             }
+        }
+        else
+        {
+            // Normal state
+            TempPen = ::GetFocus() == GetSafeHwnd() ?
+                CreatePen(PS_SOLID, 1, RGB(0, 120, 212)) :
+                CreatePen(PS_SOLID, 1, GetSysColor(COLOR_ACTIVEBORDER));
+            TempBrush = m_bUseCustomBkColor ?
+                CreateSolidBrush(m_BkColor) :
+                CreateSolidBrush(RGB(253, 253, 253));
         }
 
         SelectObject(pNMCD->hdc, TempPen);
