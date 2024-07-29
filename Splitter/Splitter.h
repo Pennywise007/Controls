@@ -17,14 +17,15 @@
 // Anchor splitter
 splitter.AttachSplitterToWindow(*this, CMFCDynamicLayout::MoveHorizontal(50), CMFCDynamicLayout::SizeVertical(100));
 // Or use Layout
-splitter.SetCallbacks(nullptr, [&](CSplitter* /*splitter)
+m_splitterForKeys.SetCallbacks(nullptr, [&](CSplitter* splitter)
         {
-            Layout::AnchorRemove(splitter, *this, { AnchorSide::eLeft, AnchorSide::eRight });
-            Layout::AnchorWindow(splitter, *this, { AnchorSide::eLeft, AnchorSide::eRight }, AnchorSide::eRight, 100);
+            Layout::AnchorRemove(*splitter, *this, { AnchorSide::eLeft, AnchorSide::eRight });
+            Layout::AnchorWindow(*splitter, *this, { AnchorSide::eLeft, AnchorSide::eRight }, AnchorSide::eRight, 100);
         });
-Layout::AnchorWindow(view, splitter, { AnchorSide::eLeft }, AnchorSide::eRight, 100);
+Layout::AnchorWindow(m_splitterForKeys, *this, { AnchorSide::eLeft, AnchorSide::eRight }, AnchorSide::eRight, 100);
+Layout::AnchorWindow(m_splitterForKeys, *this, { AnchorSide::eBottom }, AnchorSide::eBottom, 100);
 
-// Restrict bounds
+// Restrict bounds. NOTE: use with AttachSplitterToWindow
 splitter.SetControlBounds(CSplitter::BoundsType::eOffsetFromParentBounds,
         CRect(300, CSplitter::kNotSpecified, rect.Width(), CSplitter::kNotSpecified));
 
