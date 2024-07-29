@@ -69,8 +69,8 @@ void CTabControl::OnSize(UINT nType, int cx, int cy)
 {
     CTabCtrl::OnSize(nType, cx, cy);
 
-    layoutCurrentWindow();
     resizeTabs();
+    layoutCurrentWindow();
 }
 
 int CTabControl::GetCurSel() const
@@ -107,10 +107,16 @@ BOOL CTabControl::DeleteTab(_In_ int nItem)
 BOOL CTabControl::DeleteAllItems()
 {
     const auto res = CTabCtrl::DeleteAllItems();
-    if (res == TRUE)
-        m_tabWindows.clear();
+    if (res == FALSE)
+        return FALSE;
 
-    return res;
+    for (const auto& window : m_tabWindows)
+    {
+        window->DestroyWindow();
+    }
+    m_tabWindows.clear();
+
+    return TRUE;
 }
 
 BOOL CTabControl::OnTcnSelchange(NMHDR* /*pNMHDR*/, LRESULT* pResult)
@@ -165,7 +171,7 @@ void CTabControl::layoutCurrentWindow()
     clRc.right -= 2;
     clRc.bottom--;
 
-    window->MoveWindow(&clRc, TRUE);   
+    window->MoveWindow(&clRc, TRUE);
 }
 
 void CTabControl::resizeTabs()
