@@ -89,7 +89,7 @@ private:
     // get anchor manager instance
     static Layout& Instance();
     // calc window rect
-    static CRect GetWindowRect(HWND hWnd, HWND hAttachingWindow = nullptr);
+    [[nodiscard]] CRect GetWindowRect(HWND hWnd, HWND hAttachingWindow = nullptr);
     // if we don`t need to handle def window proc but we do - detach
     void CheckNecessityToHandleOnSizeChangedEvent(const CWnd& window);
 
@@ -146,6 +146,13 @@ private:    // Size restrictions
     std::map<HWND, MinimumSize> m_minimumSizeWindows;
 private:
     std::map<HWND, OnSizeChangedCallback> m_onSizeChangedCallbacks;
+private:
+    // If control linked sides to different controls it can be in inconsistent state during resizing
+    // For example: we linked left control side to the splitter and right to the dialog
+    // when we exit from full screen mode we apply changes to the right side before applying changes to left size
+    // our control width become <0 but when we try to move it - negative values will be ignored.
+    // We will store current rect and apply it when we receive movements for the left side.
+    std::unordered_map<HWND, CRect> m_windowsWithNegativeRects;
 };
 
 // Helper class, allow to apply layout from dialog resource files

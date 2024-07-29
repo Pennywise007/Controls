@@ -38,7 +38,7 @@ void Layout::AnchorWindow(const CWnd& who, const CWnd& anchorTarget, AnchoredSid
 
     anchor.m_anchoredWindows[anchorTarget.m_hWnd].anchoredWindows[who.m_hWnd].emplace_back(
         AnchorTargetInfo::AnchoredWindowInfo{ std::move(anchoredSides), anchorTargetSide,  ratio,
-                                                GetWindowRect(who.m_hWnd), GetWindowRect(anchorTarget.m_hWnd, who.m_hWnd) });
+                                              anchor.GetWindowRect(who.m_hWnd), anchor.GetWindowRect(anchorTarget.m_hWnd, who.m_hWnd) });
 
     DefaultWindowProc::OnWindowMessage(anchorTarget, WM_WINDOWPOSCHANGED, [](HWND hWnd, WPARAM wParam, LPARAM lParam, auto)
         {
@@ -125,7 +125,7 @@ void Layout::SetWindowBounds(CWnd& wnd, BoundsType type, std::optional<LONG> lef
     boundInfo.right = std::move(right);
     boundInfo.bottom = std::move(bottom);
 
-    CRect rect = GetWindowRect(wnd.m_hWnd);
+    CRect rect = anchor.GetWindowRect(wnd.m_hWnd);
     if (boundInfo.ApplyBoundsToRect(wnd.m_hWnd, rect))
         wnd.MoveWindow(rect);
 
@@ -270,6 +270,11 @@ void Layout::OnWindowPosChanged(HWND hWnd, WPARAM /*wParam*/, LPARAM lParam)
         if (deltaBottom.has_value())
             newRect.bottom = getInitialRectForSide(AnchorSide::eBottom).bottom + (LONG)round(*deltaBottom);
 
+        if (newRect.Width() < 0 || newRect.Height() < 0)
+            m_windowsWithNegativeRects[attachedHwnd] = newRect;
+        else
+            m_windowsWithNegativeRects.erase(attachedHwnd);
+
         if (newRect != currentWindowRect)
         {
             /* ::SetWindowPos(attachedHwnd, HWND_TOP, newRect.left, newRect.top,
@@ -327,6 +332,9 @@ void Layout::OnGetMinMaxInfo(HWND hWnd, WPARAM /*wParam*/, LPARAM lParam)
 
 CRect Layout::GetWindowRect(HWND hWnd, HWND hAttachingWindow /*= nullptr*/)
 {
+    if (auto it = m_windowsWithNegativeRects.find(hWnd); it != m_windowsWithNegativeRects.end())
+        return it->second;
+
     CRect rect;
     if (const HWND parent = ::GetParent(hWnd); ::IsWindow(parent) && (!hAttachingWindow || ::GetParent(hAttachingWindow) != hWnd))
     {
