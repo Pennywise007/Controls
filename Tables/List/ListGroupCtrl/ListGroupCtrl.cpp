@@ -1267,7 +1267,7 @@ int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
     if (ps->m_sortType != CListGroupCtrl::SortType::eAscending &&
         ps->m_sortType != CListGroupCtrl::SortType::eDescending)
     {
-        return ps->m_control->GetDefaultItemIndex((int)lParam1) < ps->m_control->GetDefaultItemIndex((int)lParam2);
+        return ps->m_control->GetDefaultItemIndex((int)lParam1) > ps->m_control->GetDefaultItemIndex((int)lParam2);
     }
 
     TCHAR left[256] = _T(""), right[256] = _T("");

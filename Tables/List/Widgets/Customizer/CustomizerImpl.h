@@ -306,6 +306,19 @@ SetTooltipOnColumn(int column, CString text)
     m_HeaderCtrl.SetColumnTooltip(column, std::move(text));
 }
 
+template<typename CBaseList>
+inline int Customizer<CBaseList>::GetRealItemIndex(int item)
+{
+    if constexpr (std::is_base_of_v<CListGroupCtrl, CBaseList>)
+    {
+        return CListGroupCtrl::GetDefaultItemIndex(item);
+    }
+    else
+    {
+        return GetRealItemIndex(item);
+    }
+}
+
 template <typename CBaseList>
 void Customizer<CBaseList>::PreSubclassWindow()
 {
@@ -333,7 +346,7 @@ void Customizer<CBaseList>::PreSubclassWindow()
 template<typename CBaseList>
 inline LRESULT Customizer<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    m_subItemInfo.ProcessWindowProc(message, wParam, lParam, [&](int i) { return CBaseList::GetItemData(i); });
+    m_subItemInfo.ProcessWindowProc(message, wParam, lParam, [&](int i) { return GetRealItemIndex(i); });
 
     switch (message)
     {
@@ -342,7 +355,10 @@ inline LRESULT Customizer<CBaseList>::WindowProc(UINT message, WPARAM wParam, LP
             const auto* pItem = reinterpret_cast<const LVITEM*>(lParam);
 
             const auto res = CBaseList::WindowProc(message, wParam, lParam);
-            CBaseList::SetItemData(pItem->iItem, pItem->iItem);
+            if constexpr (!std::is_base_of_v<CListGroupCtrl, CBaseList>)
+            {
+                CBaseList::SetItemData(pItem->iItem, pItem->iItem);
+            }
             return res;
         }
     default:
@@ -381,7 +397,7 @@ BOOL Customizer<CBaseList>::OnNMCustomdraw(NMHDR* pNMHDR, LRESULT* pResult)
             if (CBaseList::GetItemState(iItem, LVIS_SELECTED) == LVIS_SELECTED)
                 break;
 
-            const auto* itemInfo = m_subItemInfo.Get(CBaseList::GetItemData(iItem), iSubItem);
+            const auto* itemInfo = m_subItemInfo.Get(GetRealItemIndex(iItem), iSubItem);
             if (!itemInfo || (!itemInfo->backColor.has_value() && !itemInfo->textColor.has_value()))
                 break;
 

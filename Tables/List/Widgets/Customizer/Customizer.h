@@ -54,6 +54,9 @@ public:
     void SetTooltip(int item, int subItem, CString text);
     void SetTooltipOnColumn(int column, CString text);
 
+private:
+    int GetRealItemIndex(int item);
+
 protected:
     DECLARE_MESSAGE_MAP()
     virtual void PreSubclassWindow() override;

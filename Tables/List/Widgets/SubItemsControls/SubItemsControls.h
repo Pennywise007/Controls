@@ -41,6 +41,7 @@ public:
 private:
     [[nodiscard]] std::pair<int, int> GetSubItemUnderPoint(const CPoint& point);
     void CheckCheckboxColumnState(int column);
+    int GetRealItemIndex(int item) const;
 
 protected://********************************************************************
     DECLARE_MESSAGE_MAP()
