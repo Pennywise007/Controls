@@ -1671,7 +1671,7 @@ BOOL CListGroupCtrl::OnHdnItemStateIconClick(UINT,NMHDR* pNMHDR, LRESULT* pResul
     LPNMHEADER pNMHeader = (LPNMHEADER)pNMHDR;
 
     // first determine whether the click was a checkbox change
-    if (pNMHeader->pitem->mask & HDI_FORMAT && pNMHeader->pitem->fmt & HDF_CHECKBOX)
+    if (pNMHeader->pitem->mask & HDI_FORMAT && pNMHeader->pitem->fmt & HDF_CHECKBOX && pNMHeader->iItem == 0)
     {
         // now determine whether it was checked or unchecked
         const BOOL bUnChecked = pNMHeader->pitem->fmt & HDF_CHECKED;
