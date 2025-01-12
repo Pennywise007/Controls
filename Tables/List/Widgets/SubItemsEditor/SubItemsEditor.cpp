@@ -104,7 +104,14 @@ void CSubItemEditorWindow::setInternalControl(std::shared_ptr<CWnd> pControlWnd)
 
     ::SetFocus(m_internalControl->m_hWnd);
 
-    DefaultWindowProc::OnWindowMessage(*pControlWnd.get(), WM_KILLFOCUS, [&](HWND hWnd, WPARAM wParam, LPARAM lParam, LRESULT& result) {
+    CWnd* controlWithFocus = pControlWnd.get();
+    if (pControlWnd->IsKindOf(RUNTIME_CLASS(CComboBox)))
+    {
+        controlWithFocus = pControlWnd->GetWindow(GW_CHILD);
+        ENSURE(controlWithFocus);
+    }
+
+    DefaultWindowProc::OnWindowMessage(*controlWithFocus, WM_KILLFOCUS, [&](HWND hWnd, WPARAM wParam, LPARAM lParam, LRESULT& result) {
         // If window lost focus - user accepted input
         OnOK();
     }, this);
