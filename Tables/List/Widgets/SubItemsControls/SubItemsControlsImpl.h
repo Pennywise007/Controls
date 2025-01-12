@@ -193,6 +193,7 @@ SetCheckbox(int index, int iSubItem, bool enabled)
     }
     m_controls.Add(index, iSubItem, std::make_shared<CheckboxControl>(CBaseList::m_hWnd, index, iSubItem, enabled));
     CBaseList::SetItemText(index, iSubItem, enabled ? L"1" : L"0");  // for sorting
+    CheckCheckboxColumnState(iSubItem);
 }
 
 template<typename CBaseList>
@@ -421,7 +422,6 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
             for (auto&& [subItem, count] : m_checkboxColumns)
             {
                 SetCheckbox(pItem->iItem, subItem, false);
-                CheckCheckboxColumnState(subItem);
             }
 
             const auto res = CBaseList::WindowProc(message, wParam, lParam);
@@ -459,7 +459,6 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
             for (auto&& [subItem, count] : m_checkboxColumns)
             {
                 count = 0;
-                CheckCheckboxColumnState(subItem);
             }
         }
         break;
