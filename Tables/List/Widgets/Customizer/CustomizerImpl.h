@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Controls/Tables/List/ListGroupCtrl/ListGroupCtrl.h"
 #include "Controls/ThemeManagement.h"
 
 #include "Customizer.h"

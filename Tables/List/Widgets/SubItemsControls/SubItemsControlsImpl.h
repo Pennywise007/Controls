@@ -6,6 +6,8 @@
 
 #include "SubItemsControls.h"
 
+#include "Controls/Tables/List/ListGroupCtrl/ListGroupCtrl.h"
+
 namespace controls::list::widgets {
 
 template <typename CBaseList>

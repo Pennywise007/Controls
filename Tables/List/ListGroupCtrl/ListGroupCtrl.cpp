@@ -240,6 +240,9 @@ void* CListGroupCtrl::GetItemDataPtr(int nIndex) const
 
 int CListGroupCtrl::GetDefaultItemIndex(int nCurrentItem) const
 {
+    if (nCurrentItem == -1)
+        return -1;
+
     auto itemData = CListCtrl::GetItemData(nCurrentItem);
     ASSERT(itemData != 0);
     return ((ListItemData*)itemData)->defaultItemIndex;
