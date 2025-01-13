@@ -33,6 +33,25 @@ _NODISCARD std::wstring get_string(const wchar_t* format, double value)
     string.pop_back(); // - '\0'
     return string;
 }
+
+void apply_screen_dpi(bool horizontal, unsigned& width, unsigned& height)
+{
+    const auto screen = ::GetDC(nullptr);
+    const auto horScale = ::GetDeviceCaps(screen, LOGPIXELSX) / 100.;
+    const auto vertScale = ::GetDeviceCaps(screen, LOGPIXELSY) / 100.;
+    ::ReleaseDC(0, screen);
+
+    if (horizontal)
+    {
+        width = unsigned(width * horScale);
+        height = unsigned(height * vertScale);
+    }
+    else
+    {
+        width = unsigned(width * vertScale);
+        height = unsigned(height * horScale);
+    }
+}
 } // namespace
 
 BEGIN_MESSAGE_MAP(CSlider, CWnd)
@@ -63,6 +82,11 @@ void CSlider::OnPaint()
     else
         ASSERT(m_range.second >= m_thumbsPosition.first);
 
+    const auto currentWidth = m_thumbWidth;
+    const auto currentLineWidth = m_lineWidth;
+
+    apply_screen_dpi(GetStyle() & TBS_HORZ, m_thumbWidth, m_lineWidth);
+
     CRect clientRect;
     GetClientRect(&clientRect);
 
@@ -76,6 +100,9 @@ void CSlider::OnPaint()
         OnPaintVertical(dc, std::move(clientRect));
     else
         OnPaintHorizontal(dc, std::move(clientRect));
+
+    m_thumbWidth = currentWidth;
+    m_lineWidth = currentLineWidth;
 }
 
 void CSlider::OnPaintHorizontal(CDC& dc, CRect clientRect)
