@@ -1,6 +1,12 @@
 ﻿#include "Afxglobals.h"
 #include "TextProgressCtrl.h"
 
+#include "Controls/ThemeManagement.h"
+
+#include <uxtheme.h>
+
+#pragma comment(lib, "uxtheme.lib")
+
 IMPLEMENT_DYNAMIC(TextProgressCtrl, CProgressCtrl )
 
 BEGIN_MESSAGE_MAP(TextProgressCtrl, CProgressCtrl )
@@ -10,20 +16,52 @@ END_MESSAGE_MAP()
 
 TextProgressCtrl::~TextProgressCtrl()
 {
-    // Free resources after GetITaskbarList3
-    AfxGetApp()->ReleaseTaskBarRefs();
+    struct TaskBarReleaser {
+        ~TaskBarReleaser()
+        {
+            // Free resources after GetITaskbarList3
+            AfxGetApp()->ReleaseTaskBarRefs();
+        }
+    };
+
+    const static TaskBarReleaser releaser;
 }
 
 void TextProgressCtrl::OnPaint()
 {
-    CClientDC	dc( this );
-    CRect		rc;
+    CRect rcClient;
+    GetClientRect(&rcClient);
 
-    CProgressCtrl::OnPaint();
+    CPaintDC dcPaint(this);
+    CMemDC memDC(dcPaint, rcClient);
+    CDC& dc = memDC.GetDC();
+
+    BOOL isMarquee = (GetStyle() & PBS_MARQUEE) != 0;
+    if (isMarquee)
+    {
+        CProgressCtrl::DefWindowProc(WM_PAINT, reinterpret_cast<WPARAM>(dc.GetSafeHdc()), 0);
+    }
+    else
+    {
+        // The default ProgressCtrl draw the progress with delay, which we don't want, draw real position
+        const static ThemeHolder theme(m_hWnd, L"Progress");
+
+        DrawThemeBackground(theme, dc.GetSafeHdc(), PP_BAR, 0, &rcClient, nullptr);
+
+        // Fill the progress bar
+        int nPos = GetPos();
+        int nMin = 0, nMax = 100;
+        GetRange(nMin, nMax);
+
+        double fraction = static_cast<double>(nPos - nMin) / (nMax - nMin);
+        CRect rcFill = rcClient;
+        rcFill.right = rcFill.left + static_cast<int>(fraction * rcClient.Width());
+
+        DrawThemeBackground(theme, dc.GetSafeHdc(), PP_CHUNK, 0, &rcFill, nullptr);
+    }
 
     // Устанавливаем НОРМАЛЬНЫЙ шрифт
     CFont* pOldFont = dc.SelectObject( GetParent()->GetFont() );
-    GetClientRect( &rc );
     // Рисуем текст
     dc.SetBkMode( TRANSPARENT );
 
@@ -33,7 +71,7 @@ void TextProgressCtrl::OnPaint()
     else
         CProgressCtrl::GetWindowTextW(showText);
 
-    dc.DrawText( showText, rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER );
+    dc.DrawText( showText, rcClient, DT_SINGLELINE | DT_CENTER | DT_VCENTER );
 
     // Восстанавливаем предыдущий шрифт
     dc.SelectObject( pOldFont );
@@ -50,20 +88,27 @@ void TextProgressCtrl::SetZeroRange( short range )
     SetPos( 0 );
 
     // Таскбар Win7
-    auto pTaskbarList = afxGlobalData.GetITaskbarList3();
+    auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     pTaskbarList->SetProgressValue( GetParent()->GetSafeHwnd(), 0, range );
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_NOPROGRESS );
 }
 
-void TextProgressCtrl::SetPosition( int pos )
+void TextProgressCtrl::SetPosition(int pos)
 {
-    SetPos( pos );
+    SetPos(pos);
 
     // Таскбар Win7
-    auto pTaskbarList = afxGlobalData.GetITaskbarList3();
+    auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     int _min, _max; GetRange( _min, _max );
+
+    if (pos == _max)
+    {
+        pTaskbarList->SetProgressState(GetParent()->GetSafeHwnd(), TBPF_NOPROGRESS);
+        return;
+    }
+
     pTaskbarList->SetProgressValue( GetParent()->GetSafeHwnd(), pos, _max );
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_NORMAL );
 }
@@ -71,7 +116,7 @@ void TextProgressCtrl::SetPosition( int pos )
 void TextProgressCtrl::SetIndeterminate( BOOL bInf ) const
 {
     // Таскбар Win7
-    auto pTaskbarList = afxGlobalData.GetITaskbarList3();
+    auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), bInf ? TBPF_INDETERMINATE : TBPF_NOPROGRESS );
 }
@@ -79,7 +124,7 @@ void TextProgressCtrl::SetIndeterminate( BOOL bInf ) const
 void TextProgressCtrl::Pause() const
 {
     // Таскбар Win7
-    auto pTaskbarList = afxGlobalData.GetITaskbarList3();
+    auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_PAUSED );
 }
@@ -87,7 +132,7 @@ void TextProgressCtrl::Pause() const
 void TextProgressCtrl::Error() const
 {
     // Таскбар Win7
-    auto pTaskbarList = afxGlobalData.GetITaskbarList3();
+    auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_ERROR );
 }

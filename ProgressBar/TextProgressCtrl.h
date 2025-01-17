@@ -19,7 +19,7 @@ protected:
 
 public:
     void SetZeroRange( short range );
-    void SetPosition( int pos );
+    void SetPosition(int pos);
     void SetIndeterminate( BOOL bInf = TRUE ) const;
     void Pause() const;
     void Error() const;
