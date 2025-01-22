@@ -7,11 +7,12 @@
 
 #pragma comment(lib, "uxtheme.lib")
 
-IMPLEMENT_DYNAMIC(TextProgressCtrl, CProgressCtrl )
+IMPLEMENT_DYNAMIC(TextProgressCtrl, CProgressCtrl)
 
-BEGIN_MESSAGE_MAP(TextProgressCtrl, CProgressCtrl )
+BEGIN_MESSAGE_MAP(TextProgressCtrl, CProgressCtrl)
     ON_WM_PAINT()
     ON_WM_ERASEBKGND()
+    ON_WM_SHOWWINDOW()
 END_MESSAGE_MAP()
 
 TextProgressCtrl::~TextProgressCtrl()
@@ -23,6 +24,15 @@ TextProgressCtrl::~TextProgressCtrl()
             AfxGetApp()->ReleaseTaskBarRefs();
         }
     };
+
+
+    if (m_taskBarChanged)
+    {
+        // Hiding task bar changes
+        auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
+        if (NULL == pTaskbarList) return;
+        pTaskbarList->SetProgressState(GetParent()->GetSafeHwnd(), TBPF_NOPROGRESS);
+    }
 
     const static TaskBarReleaser releaser;
 }
@@ -102,42 +112,53 @@ void TextProgressCtrl::SetPosition(int pos)
     auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     int _min, _max; GetRange( _min, _max );
-
-    if (pos == _max)
-    {
-        pTaskbarList->SetProgressState(GetParent()->GetSafeHwnd(), TBPF_NOPROGRESS);
-        return;
-    }
-
+    m_taskBarChanged = true;
     pTaskbarList->SetProgressValue( GetParent()->GetSafeHwnd(), pos, _max );
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_NORMAL );
 }
 
-void TextProgressCtrl::SetIndeterminate( BOOL bInf ) const
+void TextProgressCtrl::SetIndeterminate( BOOL bInf )
 {
     // Таскбар Win7
     auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), bInf ? TBPF_INDETERMINATE : TBPF_NOPROGRESS );
+    m_taskBarChanged = bInf;
 }
 
-void TextProgressCtrl::Pause() const
+void TextProgressCtrl::Pause()
 {
     // Таскбар Win7
     auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
+    m_taskBarChanged = true;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_PAUSED );
 }
 
-void TextProgressCtrl::Error() const
+void TextProgressCtrl::Error()
 {
     // Таскбар Win7
     auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
     if (NULL == pTaskbarList) return;
+    m_taskBarChanged = true;
     pTaskbarList->SetProgressState( GetParent()->GetSafeHwnd(), TBPF_ERROR );
 }
 
 void TextProgressCtrl::SetOutputFormat(const std::wstring& format)
 {
     m_outputFormat = format;
+}
+
+void TextProgressCtrl::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+    CProgressCtrl::OnShowWindow(bShow, nStatus);
+
+    if (m_taskBarChanged && !bShow)
+    {
+        // Hiding task bar changes
+        auto pTaskbarList = GetGlobalData()->GetITaskbarList3();
+        if (NULL == pTaskbarList) return;
+        pTaskbarList->SetProgressState(GetParent()->GetSafeHwnd(), TBPF_NOPROGRESS);
+        m_taskBarChanged = false;
+    }
 }
