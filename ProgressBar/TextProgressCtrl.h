@@ -9,11 +9,11 @@ class TextProgressCtrl : public CProgressCtrl
 
 public:
     TextProgressCtrl() = default;
-    virtual ~TextProgressCtrl();
 
 protected:
     DECLARE_MESSAGE_MAP()
 
+    afx_msg void OnDestroy();
     afx_msg void OnPaint();
     afx_msg BOOL OnEraseBkgnd(CDC* pDC);
     afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);

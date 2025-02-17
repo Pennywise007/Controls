@@ -10,21 +10,15 @@
 IMPLEMENT_DYNAMIC(TextProgressCtrl, CProgressCtrl)
 
 BEGIN_MESSAGE_MAP(TextProgressCtrl, CProgressCtrl)
+    ON_WM_DESTROY()
     ON_WM_PAINT()
     ON_WM_ERASEBKGND()
     ON_WM_SHOWWINDOW()
 END_MESSAGE_MAP()
 
-TextProgressCtrl::~TextProgressCtrl()
+void TextProgressCtrl::OnDestroy()
 {
-    struct TaskBarReleaser {
-        ~TaskBarReleaser()
-        {
-            // Free resources after GetITaskbarList3
-            AfxGetApp()->ReleaseTaskBarRefs();
-        }
-    };
-
+    CProgressCtrl::OnDestroy();
 
     if (m_taskBarChanged)
     {
@@ -33,6 +27,14 @@ TextProgressCtrl::~TextProgressCtrl()
         if (NULL == pTaskbarList) return;
         pTaskbarList->SetProgressState(GetParent()->GetSafeHwnd(), TBPF_NOPROGRESS);
     }
+
+    struct TaskBarReleaser {
+        ~TaskBarReleaser()
+        {
+            // Free resources after GetITaskbarList3
+            AfxGetApp()->ReleaseTaskBarRefs();
+        }
+    };
 
     const static TaskBarReleaser releaser;
 }
