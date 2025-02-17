@@ -59,6 +59,7 @@ BEGIN_MESSAGE_MAP(CSlider, CWnd)
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONUP()
     ON_WM_MOUSEMOVE()
+    ON_WM_MOUSELEAVE()
     ON_WM_KEYDOWN()
     ON_WM_GETDLGCODE()
     ON_WM_TIMER()
@@ -73,14 +74,14 @@ void CSlider::OnPaint()
         return;
     }
 
-    ASSERT(m_range.first <= m_thumbsPosition.first);
+    ASSERT(m_range.first <= m_thumbs.first.position);
     if (GetStyle() & TBS_ENABLESELRANGE)
     {
-        ASSERT(m_thumbsPosition.first <= m_thumbsPosition.second);
-        ASSERT(m_thumbsPosition.second <= m_range.second);
+        ASSERT(m_thumbs.first.position <= m_thumbs.second.position);
+        ASSERT(m_thumbs.second.position <= m_range.second);
     }
     else
-        ASSERT(m_range.second >= m_thumbsPosition.first);
+        ASSERT(m_range.second >= m_thumbs.first.position);
 
     const auto currentWidth = m_thumbWidth;
     const auto currentLineWidth = m_lineWidth;
@@ -114,11 +115,11 @@ void CSlider::OnPaintHorizontal(CDC& dc, CRect clientRect)
     const auto height = clientRect.Height();
     const double width = GetControlWidthInPixels();
 
-    const int leftPos = static_cast<int>(round((m_thumbsPosition.first - m_range.first) / (m_range.second - m_range.first) * width));
-    const int rightPos = static_cast<int>(round((m_thumbsPosition.second - m_range.first) / (m_range.second - m_range.first) * width)) + m_thumbWidth;
+    const int leftPos = static_cast<int>(round((m_thumbs.first.position - m_range.first) / (m_range.second - m_range.first) * width));
+    const int rightPos = static_cast<int>(round((m_thumbs.second.position - m_range.first) / (m_range.second - m_range.first) * width)) + m_thumbWidth;
 
-    m_thumbsRects = std::make_pair(CRect(CPoint(leftPos, 0), CSize(m_thumbWidth, height)),
-                                   CRect(CPoint(rightPos, 0), CSize(m_thumbWidth, height)));
+    m_thumbs.first.rect = CRect(CPoint(leftPos, 0), CSize(m_thumbWidth, height));
+    m_thumbs.second.rect = CRect(CPoint(rightPos, 0), CSize(m_thumbWidth, height));
 
     // draw common line and selection
     clientRect.top = clientRect.bottom = clientRect.CenterPoint().y;
@@ -136,29 +137,20 @@ void CSlider::OnPaintHorizontal(CDC& dc, CRect clientRect)
     {
         dc.FillSolidRect(clientRect, kLineColor);
 
-        clientRect.left = m_thumbsRects.first.right;
-        clientRect.right = m_thumbsRects.second.left;
+        clientRect.left = m_thumbs.first.rect.right;
+        clientRect.right = m_thumbs.second.rect.left;
         clientRect.InflateRect(1, 2);
         dc.FillSolidRect(clientRect, selectionColor);
     }
     else
     {
         dc.FillSolidRect(clientRect, selectionColor);
-        m_thumbsRects.second.SetRectEmpty();
+        m_thumbs.second.rect.SetRectEmpty();
     }
-    // draw thumbs
-    const CBrush thumbBrush(kThumbColor);
-    const CBrush thumbBrushTracking(darker(kThumbColor, 20));
 
-    dc.SelectStockObject(WHITE_PEN);
-
+    DrawThumb(dc, m_thumbs.first);
     if (GetStyle() & TBS_ENABLESELRANGE)
-    {
-        dc.SelectObject((m_trackMode && m_trackMode != TrackMode::TRACK_LEFT) ? thumbBrushTracking : thumbBrush);
-        dc.RoundRect(m_thumbsRects.second, CPoint(6, 6));
-    }
-    dc.SelectObject((m_trackMode&& m_trackMode != TrackMode::TRACK_RIGHT) ? thumbBrushTracking : thumbBrush);
-    dc.RoundRect(m_thumbsRects.first, CPoint(6, 6));
+        DrawThumb(dc, m_thumbs.second);
 }
 
 void CSlider::OnPaintVertical(CDC& dc, CRect clientRect)
@@ -168,11 +160,11 @@ void CSlider::OnPaintVertical(CDC& dc, CRect clientRect)
     const auto height = clientRect.Width();
     const double width = GetControlWidthInPixels();
 
-    const int leftPos = int(round((m_thumbsPosition.first - m_range.first) / (m_range.second - m_range.first) * width));
-    const int rightPos = int(round((m_thumbsPosition.second - m_range.first) / (m_range.second - m_range.first) * width) + m_thumbWidth);
+    const int leftPos = int(round((m_thumbs.first.position - m_range.first) / (m_range.second - m_range.first) * width));
+    const int rightPos = int(round((m_thumbs.second.position - m_range.first) / (m_range.second - m_range.first) * width) + m_thumbWidth);
 
-    m_thumbsRects = std::make_pair(CRect(CPoint(0, leftPos), CSize(height, m_thumbWidth)),
-                                   CRect(CPoint(0, rightPos), CSize(height, m_thumbWidth)));
+    m_thumbs.first.rect = CRect(CPoint(0, leftPos), CSize(height, m_thumbWidth));
+    m_thumbs.second.rect = CRect(CPoint(0, rightPos), CSize(height, m_thumbWidth));
 
     // draw common line and selection
     clientRect.left = clientRect.right = clientRect.CenterPoint().x;
@@ -184,26 +176,53 @@ void CSlider::OnPaintVertical(CDC& dc, CRect clientRect)
     if (GetStyle() & TBS_ENABLESELRANGE)
     {
         dc.FillSolidRect(clientRect, kLineColor);
-        clientRect.top = m_thumbsRects.first.bottom;
-        clientRect.bottom = m_thumbsRects.second.top;
+        clientRect.top = m_thumbs.first.rect.bottom;
+        clientRect.bottom = m_thumbs.second.rect.top;
         clientRect.InflateRect(2, 1);
         dc.FillSolidRect(clientRect, selectionColor);
     }
     else
     {
         dc.FillSolidRect(clientRect, selectionColor);
-        m_thumbsRects.second.SetRectEmpty();
+        m_thumbs.second.rect.SetRectEmpty();
     }
 
+    DrawThumb(dc, m_thumbs.first);
+    if (GetStyle() & TBS_ENABLESELRANGE)
+        DrawThumb(dc, m_thumbs.second);
+}
+
+void CSlider::DrawThumb(CDC& dc, const struct ThumbInfo& info)
+{
+    // We don't draw second thumb if TBS_ENABLESELRANGE is disabled
+    ASSERT(&info != &m_thumbs.second || GetStyle() & TBS_ENABLESELRANGE);
+
+    COLORREF color;
+    if (IsWindowEnabled())
+    {
+        switch (info.state)
+        {
+        case ThumbInfo::State::eHot:
+            color = darker(kThumbColor, 20);
+            break;
+        case ThumbInfo::State::eTracking:
+            color = darker(kThumbColor, 40);
+            break;
+        default:
+            ASSERT(info.state == ThumbInfo::State::eNormal);
+            color = kThumbColor;
+            break;
+        }
+    }
+    else
+        color = darker(kThumbColor, -20);
+
     // draw thumbs
-    const CBrush thumbBrush(kThumbColor);
-    const CBrush thumbBrushTracking(darker(kThumbColor, 20));
+    const CBrush thumbBrush(color);
 
     dc.SelectStockObject(WHITE_PEN);
-    dc.SelectObject((m_trackMode && m_trackMode != TrackMode::TRACK_RIGHT) ? thumbBrushTracking : thumbBrush);
-    dc.RoundRect(m_thumbsRects.first, CPoint(6, 6));
-    dc.SelectObject((m_trackMode && m_trackMode != TrackMode::TRACK_LEFT) ? thumbBrushTracking : thumbBrush);
-    dc.RoundRect(m_thumbsRects.second, CPoint(6, 6));
+    dc.SelectObject(thumbBrush);
+    dc.RoundRect(info.rect, CPoint(6, 6));
 }
 
 double CSlider::GetControlWidthInPixels() const
@@ -225,34 +244,37 @@ void CSlider::OnLButtonDown(UINT nFlags, CPoint point)
     SetFocus();
     Invalidate();
 
-    if (!m_trackMode.has_value())
+    const bool trackLeft = m_thumbs.first.state == ThumbInfo::State::eTracking;
+    const bool trackRight = m_thumbs.second.state == ThumbInfo::State::eTracking;
+    if (!trackLeft && !trackRight)
     {
         if (GetStyle() & TBS_ENABLESELRANGE)
         {
-            if (m_thumbsRects.first.PtInRect(point))
+            if (m_thumbs.first.rect.PtInRect(point))
             {
-                m_trackMode = TrackMode::TRACK_LEFT;
-                m_clickOffsetFormThumbCenter = point - m_thumbsRects.first.CenterPoint();
+                m_thumbs.first.state = ThumbInfo::State::eTracking;
+                m_clickOffsetFormThumbCenter = point - m_thumbs.first.rect.CenterPoint();
 
                 ShowSliderTooltip(true, true);
             }
-            else if (m_thumbsRects.second.PtInRect(point))
+            else if (m_thumbs.second.rect.PtInRect(point))
             {
-                m_trackMode = TrackMode::TRACK_RIGHT;
-                m_clickOffsetFormThumbCenter = point - m_thumbsRects.second.CenterPoint();
+                m_thumbs.second.state = ThumbInfo::State::eTracking;
+                m_clickOffsetFormThumbCenter = point - m_thumbs.second.rect.CenterPoint();
                 ShowSliderTooltip(false, true);
             }
             else
             {
                 CRect middleRect;
                 if (GetStyle() & TBS_VERT)
-                    middleRect = CRect(0, m_thumbsRects.first.bottom + 1, m_thumbsRects.first.right, m_thumbsRects.second.top - 1);
+                    middleRect = CRect(0, m_thumbs.first.rect.bottom + 1, m_thumbs.first.rect.right, m_thumbs.second.rect.top - 1);
                 else
-                    middleRect = CRect(m_thumbsRects.first.right + 1, 0, m_thumbsRects.second.left - 1, m_thumbsRects.second.bottom);
+                    middleRect = CRect(m_thumbs.first.rect.right + 1, 0, m_thumbs.second.rect.left - 1, m_thumbs.second.rect.bottom);
 
                 if (middleRect.PtInRect(point))
                 {
-                    m_trackMode = TrackMode::TRACK_MIDDLE;
+                    m_thumbs.first.state = ThumbInfo::State::eTracking;
+                    m_thumbs.second.state = ThumbInfo::State::eTracking;
                     m_clickOffsetFormThumbCenter = point - middleRect.CenterPoint();
                 }
                 else
@@ -264,7 +286,7 @@ void CSlider::OnLButtonDown(UINT nFlags, CPoint point)
         }
         else
         {
-            m_trackMode = TrackMode::TRACK_LEFT;
+            m_thumbs.first.state = ThumbInfo::State::eTracking;
             m_clickOffsetFormThumbCenter = {};
             OnMouseMove(nFlags, point);
             ShowSliderTooltip(true, true);
@@ -275,79 +297,16 @@ void CSlider::OnLButtonDown(UINT nFlags, CPoint point)
     CWnd::OnLButtonDown(nFlags, point);
 }
 
-void CSlider::OnMouseMove(UINT nFlags, CPoint point)
-{
-    if (m_trackMode.has_value())
-    {
-        const int position = GetStyle() & TBS_VERT ? (point.y - m_clickOffsetFormThumbCenter.y) : (point.x - m_clickOffsetFormThumbCenter.x);
-
-        const double controlWidthInPixels = GetControlWidthInPixels();
-        const double countDataInOnePixel = (m_range.second - m_range.first) / std::max<double>(controlWidthInPixels, 1.);
-
-        const auto previousThumbPositions = m_thumbsPosition;
-
-        switch (*m_trackMode)
-        {
-        case TrackMode::TRACK_LEFT:
-            {
-                const double newValue = countDataInOnePixel * double(position - (int)m_thumbWidth / 2) + m_range.first;
-
-                m_thumbsPosition.first = std::clamp(ApplyIncrementStep(m_thumbsPosition.first, newValue),
-                                                    m_range.first, GetStyle() & TBS_ENABLESELRANGE ? m_thumbsPosition.second : m_range.second);
-                ShowSliderTooltip(true);
-            }
-            break;
-        case TrackMode::TRACK_RIGHT:
-            {
-                const double newValue = countDataInOnePixel * double(position - (int)m_thumbWidth * 3 / 2) + m_range.first;
-
-                m_thumbsPosition.second = std::clamp(ApplyIncrementStep(m_thumbsPosition.second, newValue),
-                                                     m_thumbsPosition.first, m_range.second);
-                ShowSliderTooltip(false);
-            }
-            break;
-        case TrackMode::TRACK_MIDDLE:
-            {
-                const double delta = m_thumbsPosition.second - m_thumbsPosition.first;
-                ASSERT(delta >= 0.0);
-                const double newValue = countDataInOnePixel * double(position - (int)m_thumbWidth) + m_range.first - delta / 2.0;
-
-                m_thumbsPosition.first = ApplyIncrementStep(m_thumbsPosition.first, newValue);
-                m_thumbsPosition.second = m_thumbsPosition.first + delta;
-                if (m_thumbsPosition.first <= m_range.first)
-                {
-                    m_thumbsPosition.first = m_range.first;
-                    m_thumbsPosition.second = m_thumbsPosition.first + delta;
-                }
-                if (m_thumbsPosition.second >= m_range.second)
-                {
-                    m_thumbsPosition.second = m_range.second;
-                    m_thumbsPosition.first = m_thumbsPosition.second - delta;
-                }
-            }
-            break;
-        default:
-            ASSERT(FALSE);
-            break;
-        }
-
-        if (previousThumbPositions != m_thumbsPosition)
-        {
-            SendChangePositionEvent(previousThumbPositions);
-            RedrawWindow();
-        }
-    }
-
-    CWnd::OnMouseMove(nFlags, point);
-}
-
 void CSlider::OnLButtonUp(UINT nFlags, CPoint point)
 {
-    if (m_trackMode.has_value())
+    const bool trackLeft = m_thumbs.first.state == ThumbInfo::State::eTracking;
+    const bool trackRight = m_thumbs.second.state == ThumbInfo::State::eTracking;
+    if (trackLeft || trackRight)
     {
+        m_thumbs.first.state = m_thumbs.first.rect.PtInRect(point) ? ThumbInfo::State::eHot : ThumbInfo::State::eNormal;
+        m_thumbs.second.state = m_thumbs.second.rect.PtInRect(point) ? ThumbInfo::State::eHot : ThumbInfo::State::eNormal;
         m_tooltip.ShowWindow(SW_HIDE);
 
-        m_trackMode.reset();
         Invalidate();
     }
     else
@@ -356,6 +315,136 @@ void CSlider::OnLButtonUp(UINT nFlags, CPoint point)
     ::ReleaseCapture();
 
     CWnd::OnLButtonUp(nFlags, point);
+}
+
+void CSlider::OnMouseMove(UINT nFlags, CPoint point)
+{
+    const bool trackLeft = m_thumbs.first.state == ThumbInfo::State::eTracking;
+    const bool trackRight = m_thumbs.second.state == ThumbInfo::State::eTracking;
+    if (trackLeft || trackRight)
+    {
+        const int position = GetStyle() & TBS_VERT ? (point.y - m_clickOffsetFormThumbCenter.y) : (point.x - m_clickOffsetFormThumbCenter.x);
+
+        const double controlWidthInPixels = GetControlWidthInPixels();
+        const double countDataInOnePixel = (m_range.second - m_range.first) / std::max<double>(controlWidthInPixels, 1.);
+
+        const auto previousThumbPositions = std::make_pair(m_thumbs.first.position, m_thumbs.second.position);
+
+        if (trackLeft && trackRight)
+        {
+            const double delta = m_thumbs.second.position - m_thumbs.first.position;
+            ASSERT(delta >= 0.0);
+            const double newValue = countDataInOnePixel * double(position - (int)m_thumbWidth) + m_range.first - delta / 2.0;
+
+            m_thumbs.first.position = ApplyIncrementStep(m_thumbs.first.position, newValue);
+            m_thumbs.second.position = m_thumbs.first.position + delta;
+            if (m_thumbs.first.position <= m_range.first)
+            {
+                m_thumbs.first.position = m_range.first;
+                m_thumbs.second.position = m_thumbs.first.position + delta;
+            }
+            if (m_thumbs.second.position >= m_range.second)
+            {
+                m_thumbs.second.position = m_range.second;
+                m_thumbs.first.position = m_thumbs.second.position - delta;
+            }
+        }
+        else if (trackLeft)
+        {
+            const double newValue = countDataInOnePixel * double(position - (int)m_thumbWidth / 2) + m_range.first;
+
+            m_thumbs.first.position = std::clamp(ApplyIncrementStep(m_thumbs.first.position, newValue),
+                m_range.first, GetStyle() & TBS_ENABLESELRANGE ? m_thumbs.second.position : m_range.second);
+            ShowSliderTooltip(true);
+        }
+        else
+        {
+            const double newValue = countDataInOnePixel * double(position - (int)m_thumbWidth * 3 / 2) + m_range.first;
+
+            m_thumbs.second.position = std::clamp(ApplyIncrementStep(m_thumbs.second.position, newValue),
+                m_thumbs.first.position, m_range.second);
+            ShowSliderTooltip(false);
+        }
+
+        if (previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position))
+        {
+            SendChangePositionEvent(previousThumbPositions);
+            RedrawWindow();
+        }
+    }
+    else
+    {
+        const auto previousThumbStates = std::make_pair(m_thumbs.first.state, m_thumbs.second.state);
+        if (GetStyle() & TBS_ENABLESELRANGE)
+        {
+            if (m_thumbs.first.rect.PtInRect(point))
+            {
+                m_thumbs.first.state = ThumbInfo::State::eHot;
+                m_thumbs.second.state = ThumbInfo::State::eNormal;
+            }
+            else if (m_thumbs.second.rect.PtInRect(point))
+            {
+                m_thumbs.first.state = ThumbInfo::State::eNormal;
+                m_thumbs.second.state = ThumbInfo::State::eHot;
+            }
+            else
+            {
+                CRect middleRect;
+                if (GetStyle() & TBS_VERT)
+                    middleRect = CRect(0, m_thumbs.first.rect.bottom + 1, m_thumbs.first.rect.right, m_thumbs.second.rect.top - 1);
+                else
+                    middleRect = CRect(m_thumbs.first.rect.right + 1, 0, m_thumbs.second.rect.left - 1, m_thumbs.second.rect.bottom);
+
+                if (middleRect.PtInRect(point))
+                {
+                    m_thumbs.first.state = ThumbInfo::State::eHot;
+                    m_thumbs.second.state = ThumbInfo::State::eHot;
+                }
+                else
+                {
+                    m_thumbs.first.state = ThumbInfo::State::eNormal;
+                    m_thumbs.second.state = ThumbInfo::State::eNormal;
+                }
+            }
+        }
+        else
+        {
+            m_thumbs.first.state = ThumbInfo::State::eHot;
+        }
+
+        if (previousThumbStates != std::make_pair(m_thumbs.first.state, m_thumbs.second.state))
+            RedrawWindow();
+    }
+
+    if (!m_trackMouse)
+    {
+        TRACKMOUSEEVENT tme;
+        tme.cbSize = sizeof(TRACKMOUSEEVENT);
+        tme.dwFlags = TME_LEAVE;
+        tme.hwndTrack = m_hWnd;
+        tme.dwHoverTime = HOVER_DEFAULT;
+        if (::TrackMouseEvent(&tme))
+            m_trackMouse = true;
+    }
+
+    CWnd::OnMouseMove(nFlags, point);
+}
+
+void CSlider::OnMouseLeave()
+{
+    m_trackMouse = false;
+
+    const auto previousThumbStates = std::make_pair(m_thumbs.first.state, m_thumbs.second.state);
+
+    if (m_thumbs.first.state != ThumbInfo::State::eTracking)
+        m_thumbs.first.state = ThumbInfo::State::eNormal;
+    if (m_thumbs.second.state != ThumbInfo::State::eTracking)
+        m_thumbs.second.state = ThumbInfo::State::eNormal;
+
+    if (previousThumbStates != std::make_pair(m_thumbs.first.state, m_thumbs.second.state))
+        RedrawWindow();
+
+    CWnd::OnMouseLeave();
 }
 
 void CSlider::SetRange(_In_ std::pair<double, double> range, _In_ bool redraw)
@@ -386,13 +475,14 @@ void CSlider::SetPositions(_In_ std::pair<double, double> positions, _In_ bool r
     ASSERT(positions.first <= positions.second);
     if (positions.first > positions.second)
         std::swap(positions.first, positions.second);
-    if (m_thumbsPosition == positions)
+    if (m_thumbs.first.position == positions.first && m_thumbs.second.position == positions.second)
         return;
 
-    const auto previousThumbPositions = m_thumbsPosition;
-    m_thumbsPosition = std::move(positions);
+    const auto previousThumbPositions = std::make_pair(m_thumbs.first.position, m_thumbs.second.position);
+    m_thumbs.first.position = positions.first;
+    m_thumbs.second.position = positions.second;
 
-    if (!NormalizePositions() && previousThumbPositions != m_thumbsPosition)
+    if (!NormalizePositions() && previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position))
         SendChangePositionEvent(previousThumbPositions);
 
     if (redraw)
@@ -401,7 +491,7 @@ void CSlider::SetPositions(_In_ std::pair<double, double> positions, _In_ bool r
 
 std::pair<double, double> CSlider::GetPositions() const
 {
-    return m_thumbsPosition;
+    return std::make_pair(m_thumbs.first.position, m_thumbs.second.position);
 }
 
 void CSlider::SetThumbWidth(_In_ unsigned width)
@@ -433,54 +523,54 @@ void CSlider::SetTooltipTextFormat(const wchar_t* format)
 
 bool CSlider::NormalizePositions()
 {
-    const auto previousThumbPositions = m_thumbsPosition;
-    if (m_thumbsPosition.first < m_range.first)
+    const auto previousThumbPositions = std::make_pair(m_thumbs.first.position, m_thumbs.second.position);
+    if (m_thumbs.first.position < m_range.first)
     {
-        m_thumbsPosition.first = m_range.first;
-        if (GetStyle() & TBS_ENABLESELRANGE && m_thumbsPosition.second < m_thumbsPosition.first)
-            m_thumbsPosition.second = m_thumbsPosition.first;
+        m_thumbs.first.position = m_range.first;
+        if (GetStyle() & TBS_ENABLESELRANGE && m_thumbs.second.position < m_thumbs.first.position)
+            m_thumbs.second.position = m_thumbs.first.position;
     }
     if (GetStyle() & TBS_ENABLESELRANGE)
     {
-        if (m_thumbsPosition.second > m_range.second)
+        if (m_thumbs.second.position > m_range.second)
         {
-            m_thumbsPosition.second = m_range.second;
-            if (m_thumbsPosition.first > m_thumbsPosition.second)
-                m_thumbsPosition.first = m_thumbsPosition.second;
+            m_thumbs.second.position = m_range.second;
+            if (m_thumbs.first.position > m_thumbs.second.position)
+                m_thumbs.first.position = m_thumbs.second.position;
         }
     }
-    else if (m_thumbsPosition.first > m_range.second)
-        m_thumbsPosition.first = m_range.second;
+    else if (m_thumbs.first.position > m_range.second)
+        m_thumbs.first.position = m_range.second;
 
-    if (previousThumbPositions != m_thumbsPosition)
+    if (previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position))
         SendChangePositionEvent(previousThumbPositions);
-    return previousThumbPositions != m_thumbsPosition;
+    return previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position);
 }
 
 void CSlider::SendChangePositionEvent(const std::pair<double, double>& previousThumbPositions) const
 { 
-    ASSERT(previousThumbPositions != m_thumbsPosition);
+    ASSERT(previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position));
 
     NMTRBTHUMBPOSCHANGING posChanging;
     posChanging.hdr.hwndFrom = m_hWnd;
     posChanging.hdr.idFrom = GetWindowLong(m_hWnd, GWL_ID);
     posChanging.hdr.code = (UINT)TRBN_THUMBPOSCHANGING;
-    if (previousThumbPositions.second == m_thumbsPosition.second)
+    if (previousThumbPositions.second == m_thumbs.second.position)
     {
         posChanging.nReason = (int)TrackMode::TRACK_LEFT;
-        posChanging.dwPos = (DWORD)m_thumbsPosition.first;
+        posChanging.dwPos = (DWORD)m_thumbs.first.position;
     }
     else if (GetStyle() & TBS_ENABLESELRANGE)
     {
-        if (previousThumbPositions.first == m_thumbsPosition.first)
+        if (previousThumbPositions.first == m_thumbs.first.position)
         {
             posChanging.nReason = (int)TrackMode::TRACK_RIGHT;
-            posChanging.dwPos = (DWORD)m_thumbsPosition.second;
+            posChanging.dwPos = (DWORD)m_thumbs.second.position;
         }
         else
         {
             posChanging.nReason = (int)TrackMode::TRACK_MIDDLE;
-            posChanging.dwPos = (DWORD)m_thumbsPosition.first; // changes in both thumbs
+            posChanging.dwPos = (DWORD)m_thumbs.first.position; // changes in both thumbs
         }
     }
     else
@@ -497,10 +587,10 @@ void CSlider::ShowSliderTooltip(bool left, bool createTip)
 
     const double controlWidthInPixels = (GetStyle() & TBS_VERT ? windowRect.Height() : windowRect.Width()) - 2 * (int)m_thumbWidth;
     const double countDataInOnePixel = (m_range.second - m_range.first) / std::max<double>(controlWidthInPixels, 1.);
-    const double& sliderValue = left ? m_thumbsPosition.first : m_thumbsPosition.second;
+    const double& sliderValue = left ? m_thumbs.first.position : m_thumbs.second.position;
 
     const LONG thumbDelta = left ? (LONG)m_thumbWidth * 2 / 3 : (LONG)m_thumbWidth * 4 / 3;
-    const CRect& thumbRect = left ? m_thumbsRects.first : m_thumbsRects.second;
+    const CRect& thumbRect = left ? m_thumbs.first.rect : m_thumbs.second.rect;
 
     m_tooltip.SetLabel(get_string(m_tooltipFormat, sliderValue).c_str());
 
@@ -546,7 +636,7 @@ void CSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
     if ((nChar == keyMoveLeft || nChar == keyMoveRight) && !ctrlPressed)
     {
-        const auto previousThumbPositions = m_thumbsPosition;
+        const auto previousThumbPositions = std::make_pair(m_thumbs.first.position, m_thumbs.second.position);
 
         const double controlWidthInPixels = GetControlWidthInPixels();
         if (controlWidthInPixels == 0.0)
@@ -566,27 +656,27 @@ void CSlider::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
             if (nChar == keyMoveLeft)
             {
                 if (!shiftPressed) // Shift not pressed => move interval
-                    m_thumbsPosition.first = std::max<double>(m_thumbsPosition.first - countDataInOnePixel, m_range.first);
+                    m_thumbs.first.position = std::max<double>(m_thumbs.first.position - countDataInOnePixel, m_range.first);
 
-                m_thumbsPosition.second = std::max<double>(m_thumbsPosition.second - countDataInOnePixel, m_range.first);
+                m_thumbs.second.position = std::max<double>(m_thumbs.second.position - countDataInOnePixel, m_range.first);
             }
             else
             {
                 if (!shiftPressed) // Shift not pressed => move interval
-                    m_thumbsPosition.first = std::min<double>(m_thumbsPosition.first + countDataInOnePixel, m_range.second);
+                    m_thumbs.first.position = std::min<double>(m_thumbs.first.position + countDataInOnePixel, m_range.second);
 
-                m_thumbsPosition.second = std::min<double>(m_thumbsPosition.second + countDataInOnePixel, m_range.second);
+                m_thumbs.second.position = std::min<double>(m_thumbs.second.position + countDataInOnePixel, m_range.second);
             }
         }
         else
         {
             if (nChar == keyMoveLeft)
-                m_thumbsPosition.first = std::max<double>(m_thumbsPosition.first - countDataInOnePixel, m_range.first);
+                m_thumbs.first.position = std::max<double>(m_thumbs.first.position - countDataInOnePixel, m_range.first);
             else
-                m_thumbsPosition.first = std::min<double>(m_thumbsPosition.first + countDataInOnePixel, m_range.second);
+                m_thumbs.first.position = std::min<double>(m_thumbs.first.position + countDataInOnePixel, m_range.second);
         }
 
-        if (previousThumbPositions != m_thumbsPosition)
+        if (previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position))
         {
             SendChangePositionEvent(previousThumbPositions);
             Invalidate();
@@ -630,39 +720,39 @@ void CSlider::OnTimer(UINT_PTR nIDEvent)
     if (m_incrementStep.has_value() && moveCursorDistance < *m_incrementStep)
         moveCursorDistance = *m_incrementStep;
 
-    const auto previousThumbPositions = m_thumbsPosition;
-    if (valueAtMousePoint < m_thumbsPosition.first)
+    const auto previousThumbPositions = std::make_pair(m_thumbs.first.position, m_thumbs.second.position);;
+    if (valueAtMousePoint < m_thumbs.first.position)
     {
-        const auto newValue = ApplyIncrementStep(m_thumbsPosition.first, m_thumbsPosition.first - moveCursorDistance);
+        const auto newValue = ApplyIncrementStep(m_thumbs.first.position, m_thumbs.first.position - moveCursorDistance);
         if (newValue <= valueAtMousePoint)
         {
-            m_thumbsPosition.first = ApplyIncrementStep(m_thumbsPosition.first, valueAtMousePoint);
+            m_thumbs.first.position = ApplyIncrementStep(m_thumbs.first.position, valueAtMousePoint);
+            m_thumbs.first.state = ThumbInfo::State::eTracking;
 
             m_clickOffsetFormThumbCenter = { 0, 0 };
-            m_trackMode = TrackMode::TRACK_LEFT;
             KillTimer(NULL);
             ShowSliderTooltip(true, true);
         }
         else
-            m_thumbsPosition.first = newValue;
+            m_thumbs.first.position = newValue;
     }
-    else if (valueAtMousePoint > m_thumbsPosition.second)
+    else if (valueAtMousePoint > m_thumbs.second.position)
     {
-        const auto newValue = ApplyIncrementStep(m_thumbsPosition.second, m_thumbsPosition.second + moveCursorDistance);
+        const auto newValue = ApplyIncrementStep(m_thumbs.second.position, m_thumbs.second.position + moveCursorDistance);
         if (newValue >= valueAtMousePoint)
         {
-            m_thumbsPosition.second = ApplyIncrementStep(m_thumbsPosition.second, valueAtMousePoint);
+            m_thumbs.second.position = ApplyIncrementStep(m_thumbs.second.position, valueAtMousePoint);
+            m_thumbs.second.state = ThumbInfo::State::eTracking;
 
             m_clickOffsetFormThumbCenter = { 0, 0 };
-            m_trackMode = TrackMode::TRACK_RIGHT;
             KillTimer(NULL);
             ShowSliderTooltip(false, true);
         }
         else
-            m_thumbsPosition.second = newValue;
+            m_thumbs.second.position = newValue;
     }
 
-    if (previousThumbPositions != m_thumbsPosition)
+    if (previousThumbPositions != std::make_pair(m_thumbs.first.position, m_thumbs.second.position))
     {
         SendChangePositionEvent(previousThumbPositions);
         Invalidate();
