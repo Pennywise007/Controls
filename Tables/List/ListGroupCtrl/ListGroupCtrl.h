@@ -205,6 +205,8 @@ protected://********************************************************************
     afx_msg BOOL OnGroupTaskClick(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
     afx_msg BOOL OnHdnItemStateIconClick(UINT,NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg BOOL OnHeaderBeginDrag(UINT, NMHDR *pNMHDR, LRESULT *pResult);
+    afx_msg BOOL OnHeaderEndDrag(UINT, NMHDR *pNMHDR, LRESULT *pResult);
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg void OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg void OnSize(UINT nType, int cx, int cy);
@@ -258,6 +260,7 @@ protected://********************************************************************
     // list of columns widths, on resizing control all columns will be resize proportionally initial width
     // @see SetProportionalResizingColumns
     std::unordered_map<int, double> m_columnsProportions;
+    bool m_columnDragging = false;
 protected://***************************************************************************************
     // поиск текста в заданной строке таблицы
     bool FindItemInTable(_In_ CString&& psSearchText, _In_ unsigned RowNumber, _In_opt_ bool bCaseSensitive = false);

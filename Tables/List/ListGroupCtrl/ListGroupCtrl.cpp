@@ -48,6 +48,8 @@ BEGIN_MESSAGE_MAP(CListGroupCtrl, CListCtrl)
     ON_NOTIFY_REFLECT_EX(LVN_LINKCLICK, OnGroupTaskClick)	// Column Click
 #endif
     ON_NOTIFY_EX(HDN_ITEMSTATEICONCLICK, 0, OnHdnItemStateIconClick)
+    ON_NOTIFY_EX(HDN_BEGINTRACK, 0, OnHeaderBeginDrag)
+    ON_NOTIFY_EX(HDN_ENDTRACK, 0, OnHeaderEndDrag)
     ON_NOTIFY_REFLECT_EX(LVN_ITEMCHANGED, OnListItemChanged)    // изменение в листе
     ON_WM_KEYUP()
     ON_WM_KEYDOWN()
@@ -369,9 +371,25 @@ BOOL CListGroupCtrl::DeleteAllItems()
     return CListCtrl::DeleteAllItems();
 }
 
-BOOL CListGroupCtrl::DeleteItem(int nItem)
+BOOL CListGroupCtrl::DeleteItem(_In_ int nItem)
 {
     std::unique_ptr<ListItemData> itemData((ListItemData*)CListCtrl::GetItemData(nItem));
+    if (itemData != nullptr)
+    {
+        // When Vert scroll is visible and scrolled to the bottom, we might want to remove any item which will force Vert scroll to disappear
+        // in this case first item might `lose` its vert position and appear in the middle of control, to avoid it
+        // - check if vert scroll is still needed and if not - force EnsureVisible to force VScroll to be in Pos 0
+        // P.S. it happens only when we execute SetColumnWidth in the OnSize
+
+        int totalItems = GetItemCount();
+        int maxVisibleItems = GetCountPerPage();
+
+        bool scrollVisibleNow = totalItems > maxVisibleItems;
+        bool scrollWillBeVisibleAfterItemDeletion = (totalItems - 1) > maxVisibleItems;
+        if (scrollVisibleNow && !scrollWillBeVisibleAfterItemDeletion)
+            EnsureVisible(0, TRUE);
+    }
+
     return CListCtrl::DeleteItem(nItem);
 }
 
@@ -1682,6 +1700,18 @@ BOOL CListGroupCtrl::OnHdnItemStateIconClick(UINT,NMHDR* pNMHDR, LRESULT* pResul
     return FALSE;
 }
 
+BOOL CListGroupCtrl::OnHeaderBeginDrag(UINT, NMHDR* pNMHDR, LRESULT* pResult)
+{
+    m_columnDragging = true;
+    return FALSE;
+}
+
+BOOL CListGroupCtrl::OnHeaderEndDrag(UINT, NMHDR* pNMHDR, LRESULT* pResult)
+{
+    m_columnDragging = false;
+    return FALSE;
+}
+
 void CListGroupCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 {
     if (nChar == VK_SPACE && !is_key_pressed(VK_SHIFT) && (GetExtendedStyle() & LVS_EX_CHECKBOXES))
@@ -1716,6 +1746,7 @@ void CListGroupCtrl::OnKeyUp(UINT nChar, UINT nRepCnt, UINT nFlags)
     CListCtrl::OnKeyUp(nChar, nRepCnt, nFlags);
 }
 
+
 void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
 {
     CListCtrl::OnSize(nType, cx, cy);
@@ -1724,10 +1755,8 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
     if (m_resizingColumns)
         return;
 
-    if (!m_columnsProportions.empty())
+    if (!m_columnsProportions.empty() && !m_columnDragging)
     {
-        m_resizingColumns = true;
-
         int controlWidth = cx;
         const auto columnsCount = GetHeaderCtrl()->GetItemCount();
         for (int column = 0; column < columnsCount; ++column)
@@ -1741,6 +1770,7 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
 
         static const int vertScrollWidth = GetSystemMetrics(SM_CXVSCROLL);
 
+        m_resizingColumns = true;
         // Sometimes scroll lagging and we can't predict it
         for (int i = 0; i < vertScrollWidth; ++i)
         {
@@ -1754,7 +1784,6 @@ void CListGroupCtrl::OnSize(UINT nType, int cx, int cy)
 
             --controlWidth;
         }
-
         m_resizingColumns = false;
     }
 
