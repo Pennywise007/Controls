@@ -242,6 +242,9 @@ void* CListGroupCtrl::GetItemDataPtr(int nIndex) const
 
 int CListGroupCtrl::GetDefaultItemIndex(int nCurrentItem) const
 {
+    if (nCurrentItem == -1)
+        return -1;
+
     auto itemData = CListCtrl::GetItemData(nCurrentItem);
     ASSERT(itemData != 0);
     return ((ListItemData*)itemData)->defaultItemIndex;
@@ -1285,7 +1288,7 @@ int CALLBACK SortFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
     if (ps->m_sortType != CListGroupCtrl::SortType::eAscending &&
         ps->m_sortType != CListGroupCtrl::SortType::eDescending)
     {
-        return ps->m_control->GetDefaultItemIndex((int)lParam1) < ps->m_control->GetDefaultItemIndex((int)lParam2);
+        return ps->m_control->GetDefaultItemIndex((int)lParam1) > ps->m_control->GetDefaultItemIndex((int)lParam2);
     }
 
     TCHAR left[256] = _T(""), right[256] = _T("");
@@ -1689,7 +1692,7 @@ BOOL CListGroupCtrl::OnHdnItemStateIconClick(UINT,NMHDR* pNMHDR, LRESULT* pResul
     LPNMHEADER pNMHeader = (LPNMHEADER)pNMHDR;
 
     // first determine whether the click was a checkbox change
-    if (pNMHeader->pitem->mask & HDI_FORMAT && pNMHeader->pitem->fmt & HDF_CHECKBOX)
+    if (pNMHeader->pitem->mask & HDI_FORMAT && pNMHeader->pitem->fmt & HDF_CHECKBOX && pNMHeader->iItem == 0)
     {
         // now determine whether it was checked or unchecked
         const BOOL bUnChecked = pNMHeader->pitem->fmt & HDF_CHECKED;

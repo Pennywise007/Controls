@@ -41,6 +41,8 @@ public:
 private:
     [[nodiscard]] std::pair<int, int> GetSubItemUnderPoint(const CPoint& point);
     void CheckCheckboxColumnState(int column);
+    [[nodiscard]] int GetRealItemIndex(int item) const;
+    void OnLButtonPress(const CPoint& point);
 
 protected://********************************************************************
     DECLARE_MESSAGE_MAP()
@@ -53,6 +55,7 @@ protected://********************************************************************
     afx_msg void OnMouseLeave();
     afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
     afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+    afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
     afx_msg BOOL OnNMCustomdraw(NMHDR *pNMHDR, LRESULT *pResult);
 
 private:

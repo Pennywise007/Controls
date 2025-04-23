@@ -6,6 +6,8 @@
 
 #include "SubItemsControls.h"
 
+#include "Controls/Tables/List/ListGroupCtrl/ListGroupCtrl.h"
+
 namespace controls::list::widgets {
 
 template <typename CBaseList>
@@ -75,6 +77,7 @@ BEGIN_TEMPLATE_MESSAGE_MAP(SubItemsControls, CBaseList, CBaseList)
     ON_WM_MOUSELEAVE()
     ON_WM_LBUTTONDOWN()
     ON_WM_LBUTTONUP()
+    ON_WM_LBUTTONDBLCLK()
     ON_NOTIFY_REFLECT_EX(NM_CUSTOMDRAW, &SubItemsControls::OnNMCustomdraw)
 END_MESSAGE_MAP()
 
@@ -184,8 +187,15 @@ SetCheckbox(int index, int iSubItem, bool enabled)
         bool m_state;
     };
 
+    if (enabled)
+    {
+        const auto it = m_checkboxColumns.find(iSubItem);
+        ENSURE(it != m_checkboxColumns.end());
+        ++it->second;
+    }
     m_controls.Add(index, iSubItem, std::make_shared<CheckboxControl>(CBaseList::m_hWnd, index, iSubItem, enabled));
-    CBaseList::SetItemText(index, iSubItem, enabled ? L"A" : L"B");  // for sorting
+    CBaseList::SetItemText(index, iSubItem, enabled ? L"1" : L"0");  // for sorting
+    CheckCheckboxColumnState(iSubItem);
 }
 
 template<typename CBaseList>
@@ -353,11 +363,56 @@ void SubItemsControls<CBaseList>::CheckCheckboxColumnState(int column)
 }
 
 template<typename CBaseList>
+inline int SubItemsControls<CBaseList>::GetRealItemIndex(int item) const
+{
+    if constexpr (std::is_base_of_v<CListGroupCtrl, CBaseList>)
+    {
+        return CListGroupCtrl::GetDefaultItemIndex(item);
+    }
+    else
+    {
+        return CBaseList::GetItemData(item);
+    }
+}
+
+template<typename CBaseList>
+inline void SubItemsControls<CBaseList>::OnLButtonPress(const CPoint& point)
+{
+    const auto&& [iItem, iSubItem] = GetSubItemUnderPoint(point);
+    if (iItem == -1)
+        return;
+
+    const auto* control = m_controls.Get(GetRealItemIndex(iItem), iSubItem);
+    if (!control)
+        return;
+
+    CBaseList::SetCapture();
+    m_buttonDownControl = *control;
+    m_buttonDownControl->OnLButtonDown();
+
+    if (!(GetKeyState(VK_SHIFT) & 0x8000))
+    {
+        // remove current selection
+        if (const UINT selCount = CBaseList::GetSelectedCount(); selCount != 0)
+        {
+            POSITION pos = CBaseList::GetFirstSelectedItemPosition();
+            for (UINT index = 0; index < selCount; ++index)
+            {
+                CBaseList::SetItemState(CBaseList::GetNextSelectedItem(pos), 0, LVIS_SELECTED);
+            }
+        }
+    }
+
+    CBaseList::SetItemState(iItem, LVIS_SELECTED, LVIS_SELECTED);
+    CBaseList::EnsureVisible(iItem, TRUE);
+}
+
+template<typename CBaseList>
 LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
     auto processControls = [&]()
     {
-        m_controls.ProcessWindowProc(message, wParam, lParam, [&](int i) { return CBaseList::GetItemData(i); });
+        m_controls.ProcessWindowProc(message, wParam, lParam, [&](int i) { return GetRealItemIndex(i); });
     };
 
     switch (message)
@@ -369,17 +424,19 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
             for (auto&& [subItem, count] : m_checkboxColumns)
             {
                 SetCheckbox(pItem->iItem, subItem, false);
-                CheckCheckboxColumnState(subItem);
             }
 
             const auto res = CBaseList::WindowProc(message, wParam, lParam);
-            CBaseList::SetItemData(pItem->iItem, pItem->iItem);
+            if constexpr (!std::is_base_of_v<CListGroupCtrl, CBaseList>)
+            {
+                CBaseList::SetItemData(pItem->iItem, pItem->iItem);
+            }
             processControls();
             return res;
         }
     case LVM_DELETEITEM:
         {
-            const int iItem = CBaseList::GetItemData(wParam);
+            const int iItem = GetRealItemIndex(wParam);
             for (auto&& [subItem, count] : m_checkboxColumns)
             {
                 const auto* control = m_controls.Get(iItem, subItem);
@@ -404,7 +461,6 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
             for (auto&& [subItem, count] : m_checkboxColumns)
             {
                 count = 0;
-                CheckCheckboxColumnState(subItem);
             }
         }
         break;
@@ -460,13 +516,14 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
                         const bool bChecked = (pNMHeader->pitem->fmt & HDF_CHECKED) == FALSE;
                         for (int item = CBaseList::GetItemCount() - 1; item >= 0; --item)
                         {
-                            const auto index = CBaseList::GetItemData(item);
+                            const auto index = GetRealItemIndex(item);
                             const auto* control = m_controls.Get(index, pNMHeader->iItem);
                             if (!!control)
                             {
                                 auto checkbox = std::dynamic_pointer_cast<ICheckbox>(*control);
                                 VERIFY(!!checkbox);
                                 checkbox->SetState(bChecked);
+                                CBaseList::SetItemText(item, pNMHeader->iItem, bChecked ? L"1" : L"0");  // for sorting
                             }
                             else
                                 ASSERT(false);
@@ -477,14 +534,6 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
                     }
                 }
             }
-        }
-        break;
-    case WM_LBUTTONDBLCLK:
-        {
-            auto&& [iItem, iSubItem] = GetSubItemUnderPoint(CPoint(lParam));
-            iItem = CBaseList::GetItemData(iItem);
-            if (!!m_controls.Get(iItem, iSubItem))
-                return 0;
         }
         break;
     default:
@@ -505,7 +554,7 @@ void SubItemsControls<CBaseList>::OnMouseMove(UINT nFlags, CPoint point)
         if (!m_hoveredSubItem.has_value())
             return;
 
-        const auto* control = m_controls.Get(CBaseList::GetItemData(m_hoveredSubItem.value().first),
+        const auto* control = m_controls.Get(GetRealItemIndex(m_hoveredSubItem.value().first),
                                              m_hoveredSubItem.value().second);
         if (!control)
         {
@@ -528,7 +577,7 @@ void SubItemsControls<CBaseList>::OnMouseMove(UINT nFlags, CPoint point)
             removeHover();
             m_hoveredSubItem = std::move(itemPositions);
 
-            const auto* control = m_controls.Get(CBaseList::GetItemData(m_hoveredSubItem.value().first),
+            const auto* control = m_controls.Get(GetRealItemIndex(m_hoveredSubItem.value().first),
                                                  m_hoveredSubItem.value().second);
             if (!control)
                 return;
@@ -548,7 +597,7 @@ void SubItemsControls<CBaseList>::OnMouseLeave()
 
     if (!m_hoveredSubItem.has_value())
         return;
-    const auto* control = m_controls.Get(CBaseList::GetItemData(m_hoveredSubItem.value().first),
+    const auto* control = m_controls.Get(GetRealItemIndex(m_hoveredSubItem.value().first),
                                          m_hoveredSubItem.value().second);
     if (!control)
     {
@@ -566,39 +615,8 @@ template<typename CBaseList>
 void SubItemsControls<CBaseList>::
 OnLButtonDown(UINT nFlags, CPoint point)
 {
-    const auto handle = [&]()
-    {
-        const auto&& [iItem, iSubItem] = GetSubItemUnderPoint(point);
-        if (iItem == -1)
-            return;
-
-        const auto* control = m_controls.Get(CBaseList::GetItemData(iItem), iSubItem);
-        if (!control)
-            return;
-
-        CBaseList::SetCapture();
-        m_buttonDownControl = *control;
-        m_buttonDownControl->OnLButtonDown();
-
-        if (!(GetKeyState(VK_SHIFT) & 0x8000))
-        {
-            // remove current selection
-            if (const UINT selCount = CBaseList::GetSelectedCount(); selCount != 0)
-            {
-                POSITION pos = CBaseList::GetFirstSelectedItemPosition();
-                for (UINT index = 0; index < selCount; ++index)
-                {
-                    CBaseList::SetItemState(CBaseList::GetNextSelectedItem(pos), 0, LVIS_SELECTED);
-                }
-            }
-        }
-
-        CBaseList::SetItemState(iItem, LVIS_SELECTED, LVIS_SELECTED);
-        CBaseList::EnsureVisible(iItem, TRUE);
-    };
-
     ASSERT(!m_buttonDownControl);
-    handle();
+    OnLButtonPress(point);
 
     if (!m_buttonDownControl)
         CBaseList::OnLButtonDown(nFlags, point);
@@ -619,7 +637,7 @@ OnLButtonUp(UINT nFlags, CPoint point)
     const std::shared_ptr<ICheckbox> checkbox = std::dynamic_pointer_cast<ICheckbox>(m_buttonDownControl);
     const auto prevState = checkbox && checkbox->GetState();
 
-    m_buttonDownControl->OnLButtonUp(iItem != -1 ? CBaseList::GetItemData(iItem) : -1 , iSubItem, m_callbacksHolder);
+    m_buttonDownControl->OnLButtonUp(iItem != -1 ? GetRealItemIndex(iItem) : -1 , iSubItem, m_callbacksHolder);
     const int itemIndex = m_buttonDownControl->m_iItem;
     m_buttonDownControl.reset();
 
@@ -635,13 +653,30 @@ OnLButtonUp(UINT nFlags, CPoint point)
             else
                 ++it->second;
 
-            CBaseList::SetItemText(itemIndex, iSubItem, prevState ? L"A" : L"B");  // for sorting
+            checkbox->SetState(!prevState);
+            CBaseList::SetItemText(itemIndex, iSubItem, prevState ? L"1" : L"0");  // for sorting
 
             CheckCheckboxColumnState(iSubItem);
         }
     }
 
     CBaseList::RedrawItems(itemIndex, itemIndex);
+}
+
+template<typename CBaseList>
+inline void SubItemsControls<CBaseList>::OnLButtonDblClk(UINT nFlags, CPoint point)
+{
+    auto&& [iItem, iSubItem] = GetSubItemUnderPoint(point);
+    iItem = GetRealItemIndex(iItem);
+    if (!!m_controls.Get(iItem, iSubItem))
+    {
+        // When we dbl click on checkbox we want to switch 2 times.
+        ASSERT(!m_buttonDownControl);
+        OnLButtonPress(point);
+        return;
+    }
+
+    CBaseList::OnLButtonDblClk(nFlags, point);
 }
 
 template<typename CBaseList>
@@ -698,7 +733,7 @@ OnNMCustomdraw(NMHDR* pNMHDR, LRESULT* pResult)
             // Стадия, которая наступает перед отрисовкой каждого элемента списка.
             const int iItem = pNMCD->nmcd.dwItemSpec;
             const int iSubItem = pNMCD->iSubItem;
-            const auto* control = m_controls.Get(CBaseList::GetItemData(iItem), iSubItem);
+            const auto* control = m_controls.Get(GetRealItemIndex(iItem), iSubItem);
             if (!control)
                 break;
             control->get()->Draw(pNMCD, CBaseList::GetItemText(iItem, iSubItem));

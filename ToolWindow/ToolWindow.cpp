@@ -45,9 +45,9 @@ CToolWindow::~CToolWindow()
 {
     if (::IsWindow(m_hWnd))
     {
-        ::DestroyWindow(m_hWnd);
         ASSERT(::IsWindow(m_drawProxy.m_hWnd));
         m_drawProxy.DestroyWindow();
+        ::DestroyWindow(m_hWnd);
     }
 }
 

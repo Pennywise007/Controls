@@ -94,6 +94,7 @@ protected:
     afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
     afx_msg void OnLButtonUp(UINT nFlags, CPoint point); 
     afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+    afx_msg void OnMouseLeave();
     afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
     afx_msg UINT OnGetDlgCode();
     afx_msg void OnTimer(UINT_PTR nIDEvent);
@@ -102,8 +103,26 @@ protected:
     DECLARE_MESSAGE_MAP()
 
 private:
+    struct ThumbInfo
+    {
+        enum class State
+        {
+            eNormal,
+            eHot,
+            eTracking
+        };
+        double position;
+        State state = State::eNormal;
+        CRect rect;
+
+        explicit ThumbInfo(double _position)
+            : position(_position)
+        {}
+    };
+
     void OnPaintHorizontal(CDC& dc, CRect clientRect);
     void OnPaintVertical(CDC& dc, CRect clientRect);
+    void DrawThumb(CDC& dc, const struct ThumbInfo& info);
 
     double GetControlWidthInPixels() const;
 
@@ -117,15 +136,15 @@ private:
 
 private:
     std::optional<double> m_incrementStep;                      // increment step of moving thumb
-    std::pair<double, double> m_range = { 0, 100.};             // minimum and maximum positions for track bar
-    std::pair<double, double> m_thumbsPosition = m_range;       // thumb positions on track bar
-    std::pair<CRect, CRect> m_thumbsRects;                      // rectangles of the Left and Right thumb
+    std::pair<double, double> m_range = { 0, 100. };            // minimum and maximum positions for track bar
+    // left and right thumb infos
+    std::pair<ThumbInfo, ThumbInfo> m_thumbs = std::make_pair(ThumbInfo(0.), ThumbInfo(100.));
+    bool m_trackMouse = false;
 
     unsigned m_thumbWidth = 8;      // in pixels.
     unsigned m_lineWidth = 4;       // in pixels.
 
 private:
-    std::optional<TrackMode> m_trackMode;
     CPoint m_clickOffsetFormThumbCenter;
 
 private:

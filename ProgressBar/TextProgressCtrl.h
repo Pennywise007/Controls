@@ -9,20 +9,21 @@ class TextProgressCtrl : public CProgressCtrl
 
 public:
     TextProgressCtrl() = default;
-    virtual ~TextProgressCtrl();
 
 protected:
     DECLARE_MESSAGE_MAP()
 
+    afx_msg void OnDestroy();
     afx_msg void OnPaint();
     afx_msg BOOL OnEraseBkgnd(CDC* pDC);
+    afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
 
 public:
     void SetZeroRange( short range );
-    void SetPosition( int pos );
-    void SetIndeterminate( BOOL bInf = TRUE ) const;
-    void Pause() const;
-    void Error() const;
+    void SetPosition(int pos);
+    void SetIndeterminate( BOOL bInf = TRUE );
+    void Pause();
+    void Error();
 
     // Output string for output progress, example: L"Search progress %d/%",
     // set empty format to output text from SetWindowText
@@ -31,4 +32,5 @@ public:
 private:
     // if not empty - output text on paint with given format
     std::wstring m_outputFormat;
+    bool m_taskBarChanged = false;
 };
