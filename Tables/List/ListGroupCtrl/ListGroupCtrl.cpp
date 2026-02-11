@@ -526,17 +526,6 @@ int CListGroupCtrl::InsertColumn(_In_ int nCol, _In_ LPCTSTR lpszColumnHeading, 
         SetColumn(0, &colInfo);
     }
 
-    // добавляем первой колонке общий чекбокс
-    if (GetExtendedStyle() & LVS_EX_CHECKBOXES && Res == 0)
-    {
-        CHeaderCtrl* header = GetHeaderCtrl();
-        HDITEM hdi = { 0 };
-        hdi.mask = HDI_FORMAT;
-        Header_GetItem(*header, 0, &hdi);
-        hdi.fmt |= HDF_CHECKBOX;
-        Header_SetItem(*header, 0, &hdi);
-    }
-
     return Res;
 }
 
@@ -608,6 +597,13 @@ void CListGroupCtrl::ModifyExtendedStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd)
         // add HDS_BUTTONS because in LVS_NOSORTHEADER mode we don't receive clicks on main checkbox
         dwHeaderStyle |= HDS_CHECKBOXES | HDS_BUTTONS;
         ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
+
+        // add first column common checkbox
+        HDITEM hdi = { 0 };
+        hdi.mask = HDI_FORMAT;
+        Header_GetItem(header, 0, &hdi);
+        hdi.fmt |= HDF_CHECKBOX;
+        Header_SetItem(header, 0, &hdi);
     }
     else if (dwRemove & LVS_EX_CHECKBOXES)
     {
@@ -618,6 +614,13 @@ void CListGroupCtrl::ModifyExtendedStyle(_In_ DWORD dwRemove, _In_ DWORD dwAdd)
         if (GetStyle() & LVS_NOSORTHEADER)
             dwHeaderStyle &= ~HDS_BUTTONS;
         ::SetWindowLong(header, GWL_STYLE, dwHeaderStyle);
+
+        // remove first column common checkbox
+        HDITEM hdi = { 0 };
+        hdi.mask = HDI_FORMAT;
+        Header_GetItem(header, 0, &hdi);
+        hdi.fmt &= ~HDF_CHECKBOX;
+        Header_SetItem(header, 0, &hdi);
     }
 }
 
