@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <type_traits>
+#include <ext/core/tracer.h>
 
 namespace controls::list {
 
@@ -17,29 +18,37 @@ class SubItemsInfo
 {
 public:
     template <typename... Args>
-    Struct* Add(int item, int subItem, Args&&... args)
+    Struct* Assign(int item, int subItem, Args&&... args)
     {
-        auto res = m_subItemsInfos[item].try_emplace(subItem, Struct(std::forward<Args>(args)...));
+        auto res = m_subItemsInfos[item].insert_or_assign(subItem, Struct(std::forward<Args>(args)...));
         return &res.first->second;
     }
     const Struct* Get(int item, int subItem) const
     {
         const auto itemIt = m_subItemsInfos.find(item);
         if (itemIt == m_subItemsInfos.end())
+        {
             return nullptr;
+        }
         const auto subItemIt = itemIt->second.find(subItem);
         if (subItemIt == itemIt->second.end())
+        {
             return nullptr;
+        }
         return &subItemIt->second;
     }
     Struct* Get(int item, int subItem)
     {
         const auto itemIt = m_subItemsInfos.find(item);
         if (itemIt == m_subItemsInfos.end())
+        {
             return nullptr;
+        }
         const auto subItemIt = itemIt->second.find(subItem);
         if (subItemIt == itemIt->second.end())
+        {
             return nullptr;
+        }
         return &subItemIt->second;
     }
     void Remove(int item, int subItem)
@@ -91,7 +100,7 @@ public:
             break;
         case LVM_DELETEITEM:
             {
-                const int iItem = getItemData(wParam);
+                const int iItem = getItemData((int)wParam);
                 if (auto erasingLine = m_subItemsInfos.find(iItem); erasingLine != m_subItemsInfos.end())
                 {
                     for (auto it = std::next(erasingLine); it != m_subItemsInfos.end();)
@@ -117,7 +126,7 @@ public:
             break;
         case LVM_INSERTCOLUMN:
             {
-                const int iSubItem = wParam;
+                const int iSubItem = (int)wParam;
                 for (auto& controls : m_subItemsInfos)
                 {
                     for (auto controlIt = std::prev(controls.second.end());
@@ -137,7 +146,7 @@ public:
             break;
         case LVM_DELETECOLUMN:
             {
-                const int iSubItem = wParam;
+                const int iSubItem = (int)wParam;
                 for (auto& controls : m_subItemsInfos)
                 {
                     for (auto movingLeftIt = controls.second.upper_bound(iSubItem); movingLeftIt != controls.second.end();)

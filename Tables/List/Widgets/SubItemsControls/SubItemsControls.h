@@ -20,6 +20,7 @@ namespace controls::list::widgets {
 template <typename CBaseList = CListCtrl>
 class SubItemsControls : public CBaseList
 {
+    struct Control;
 public:
     SubItemsControls();
 
@@ -43,6 +44,7 @@ private:
     void CheckCheckboxColumnState(int column);
     [[nodiscard]] int GetRealItemIndex(int item) const;
     void OnLButtonPress(const CPoint& point);
+    void AssignControl(int item, int subItem, std::shared_ptr<Control>&& control);
 
 protected://********************************************************************
     DECLARE_MESSAGE_MAP()
@@ -65,8 +67,6 @@ private:
         OnCheckboxStateChanged checkboxStateChangedCallback;
     };
 
-    struct Control;
-
     SubItemsInfo<std::shared_ptr<Control>> m_controls;
 
     CallbacksHolder m_callbacksHolder;
@@ -81,5 +81,4 @@ private:
 
 } // namespace controls::list::widgets
 
-// т.к класс шаблонный прячем реализацию в другой хедер
 #include "SubItemsControlsImpl.h"

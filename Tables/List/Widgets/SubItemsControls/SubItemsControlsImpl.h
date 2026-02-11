@@ -32,26 +32,21 @@ struct SubItemsControls<CBaseList>::Control
             VERIFY(SUCCEEDED(::CloseThemeData(m_hTheme)));
     }
 
-    void OnMouseHover() noexcept { ASSERT(!m_state.test(State::eHovered)); m_state.set(State::eHovered); }
-    void OnMouseLeave()
-    {
-        ASSERT(m_state.test(State::eHovered));
-        m_state.set(State::eHovered, false);
-    }
-    void OnLButtonDown() noexcept { ASSERT(!m_state.test(State::eLButtonDown)); m_state.set(State::eLButtonDown); }
+    void OnMouseHover() noexcept { m_state.set(State::eHovered); }
+    void OnMouseLeave() { m_state.set(State::eHovered, false); }
+
+    void OnLButtonDown() noexcept { m_state.set(State::eLButtonDown); }
     /// <summary>Notify about button up </summary>
     /// <returns>Item index</returns>
     virtual void OnLButtonUp(int iItem, int iSubItem, CallbacksHolder& callbacks) noexcept
     {
-        ASSERT(m_state.test(State::eLButtonDown));
         m_state.set(State::eLButtonDown, false);
     }
     virtual void Draw(LPNMLVCUSTOMDRAW pNMCD, const CString& text) noexcept = 0;
 
+public:
     int m_iItem;
     int m_iSubItem;
-protected:
-    HTHEME m_hTheme = nullptr;
 
     enum State : size_t
     {
@@ -61,6 +56,8 @@ protected:
         Count
     };
     std::bitset<State::Count> m_state;
+protected:
+    HTHEME m_hTheme = nullptr;
 };
 
 template <typename CBaseList>
@@ -135,7 +132,7 @@ SetButton(int index, int iSubItem)
         }
     };
 
-    m_controls.Add(index, iSubItem, std::make_shared<ButtonControl>(CBaseList::m_hWnd, index, iSubItem));
+    AssignControl(index, iSubItem, std::make_shared<ButtonControl>(CBaseList::m_hWnd, index, iSubItem));
 }
 
 template<typename CBaseList>
@@ -144,23 +141,24 @@ SetCheckbox(int index, int iSubItem, bool enabled)
 {
     struct CheckboxControl final : ICheckbox
     {
-        explicit CheckboxControl(HWND hWnd, int iItem, int iSubItem, bool state) noexcept
+        explicit CheckboxControl(HWND hWnd, int iItem, int iSubItem, bool checked) noexcept
             : ICheckbox(iItem, iSubItem, hWnd, L"BUTTON")
-            , m_state(state) {}
+            , m_checked(checked)
+        {}
 
     private: // Control
         void Draw(LPNMLVCUSTOMDRAW pNMCD, const CString& /*text*/) noexcept override
         {
             const BUTTONPARTS buttonType = BP_CHECKBOX;
-            CHECKBOXSTATES buttonState = m_state ? CBS_CHECKEDNORMAL : CBS_UNCHECKEDNORMAL;
+            CHECKBOXSTATES buttonState = m_checked ? CBS_CHECKEDNORMAL : CBS_UNCHECKEDNORMAL;
 
             if (pNMCD->nmcd.uItemState & ODS_DISABLED)
-                buttonState = m_state ? CBS_CHECKEDDISABLED : CBS_UNCHECKEDDISABLED;
+                buttonState = m_checked ? CBS_CHECKEDDISABLED : CBS_UNCHECKEDDISABLED;
             else if (Control::m_state.test(Control::State::eLButtonDown))
-                buttonState = m_state ? CBS_CHECKEDPRESSED : CBS_UNCHECKEDPRESSED;
+                buttonState = m_checked ? CBS_CHECKEDPRESSED : CBS_UNCHECKEDPRESSED;
             else if (pNMCD->nmcd.uItemState & ODS_HOTLIGHT ||
                      Control::m_state.test(Control::State::eHovered))
-                buttonState = m_state ? CBS_CHECKEDHOT : CBS_UNCHECKEDHOT;
+                buttonState = m_checked ? CBS_CHECKEDHOT : CBS_UNCHECKEDHOT;
 
             auto rect = pNMCD->nmcd.rc;
             --rect.bottom; // fix for checkbox size
@@ -171,20 +169,20 @@ SetCheckbox(int index, int iSubItem, bool enabled)
         {
             if (iItem == Control::m_iItem && iSubItem == Control::m_iSubItem)
             {
-                m_state = !m_state;
+                m_checked = !m_checked;
                 if (callbacks.checkboxStateChangedCallback)
-                    callbacks.checkboxStateChangedCallback(Control::m_iItem, Control::m_iSubItem, m_state);
+                    callbacks.checkboxStateChangedCallback(Control::m_iItem, Control::m_iSubItem, m_checked);
                 else
                     ASSERT(false);
             }
             Control::OnLButtonUp(iItem, iSubItem, callbacks);
         }
     private: // ICheckbox
-        void SetState(bool state) override { m_state = state; }
-        [[nodiscard]] bool GetState() const override { return m_state; }
+        void SetState(bool state) override { m_checked = state; }
+        [[nodiscard]] bool GetState() const override { return m_checked; }
 
     private:
-        bool m_state;
+        bool m_checked;
     };
 
     if (enabled)
@@ -193,7 +191,7 @@ SetCheckbox(int index, int iSubItem, bool enabled)
         ENSURE(it != m_checkboxColumns.end());
         ++it->second;
     }
-    m_controls.Add(index, iSubItem, std::make_shared<CheckboxControl>(CBaseList::m_hWnd, index, iSubItem, enabled));
+    AssignControl(index, iSubItem, std::make_shared<CheckboxControl>(CBaseList::m_hWnd, index, iSubItem, enabled));
     CBaseList::SetItemText(index, iSubItem, enabled ? L"1" : L"0");  // for sorting
     CheckCheckboxColumnState(iSubItem);
 }
@@ -256,18 +254,19 @@ SetImage(int index, int iSubItem, CBitmap& hBitmap, LONG imageWidth, LONG imageH
         CSize m_imageSize;
         CMFCToolBarImages m_image;
     };
-    m_controls.Add(index, iSubItem, std::make_shared<ImageControl>(index, iSubItem, hBitmap,
-                                                                   imageWidth, imageHeight));
+    AssignControl(index, iSubItem, std::make_shared<ImageControl>(index, iSubItem, hBitmap,
+                                                                  imageWidth, imageHeight));
 }
 
 template <typename CBaseList>
 void SubItemsControls<CBaseList>::SetCheckboxColumn(int iColumnIndex)
 {
-    CBaseList::ModifyExtendedStyle(0, LVS_EX_CHECKBOXES);
     // fix checkboxes lag during control resize
     CBaseList::ModifyStyle(0, WS_CLIPCHILDREN, WS_CLIPCHILDREN);
 
     CHeaderCtrl* header = CBaseList::GetHeaderCtrl();
+    header->ModifyStyle(0, HDS_CHECKBOXES | HDS_BUTTONS);
+
     HDITEM hdi = { 0 };
     hdi.mask = HDI_FORMAT;
     Header_GetItem(*header, iColumnIndex, &hdi);
@@ -408,6 +407,15 @@ inline void SubItemsControls<CBaseList>::OnLButtonPress(const CPoint& point)
 }
 
 template<typename CBaseList>
+void SubItemsControls<CBaseList>::AssignControl(int item, int subItem, std::shared_ptr<Control>&& control)
+{
+    if (auto* existing = m_controls.Get(item, subItem); !!existing)
+        control->m_state = existing->get()->m_state;
+
+    m_controls.Assign(item, subItem, std::move(control));
+}
+
+template<typename CBaseList>
 LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 {
     auto processControls = [&]()
@@ -421,22 +429,23 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
         {
             const auto* pItem = reinterpret_cast<const LVITEM*>(lParam);
 
-            for (auto&& [subItem, count] : m_checkboxColumns)
-            {
-                SetCheckbox(pItem->iItem, subItem, false);
-            }
-
             const auto res = CBaseList::WindowProc(message, wParam, lParam);
             if constexpr (!std::is_base_of_v<CListGroupCtrl, CBaseList>)
             {
                 CBaseList::SetItemData(pItem->iItem, pItem->iItem);
             }
             processControls();
+
+            for (auto&& [subItem, count] : m_checkboxColumns)
+            {
+                SetCheckbox(pItem->iItem, subItem, false);
+            }
+
             return res;
         }
     case LVM_DELETEITEM:
         {
-            const int iItem = GetRealItemIndex(wParam);
+            const int iItem = GetRealItemIndex((int)wParam);
             for (auto&& [subItem, count] : m_checkboxColumns)
             {
                 const auto* control = m_controls.Get(iItem, subItem);
@@ -466,7 +475,7 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
         break;
     case LVM_INSERTCOLUMN:
         {
-            const int iSubItem = wParam;
+            const int iSubItem = (int)wParam;
 
             if (!m_checkboxColumns.empty())
             {
@@ -494,7 +503,7 @@ LRESULT SubItemsControls<CBaseList>::WindowProc(UINT message, WPARAM wParam, LPA
         break;
     case LVM_DELETECOLUMN:
         {
-            const int iSubItem = wParam;
+            const int iSubItem = (int)wParam;
             if (m_buttonDownControl && m_buttonDownControl->m_iSubItem == iSubItem)
                 m_buttonDownControl = nullptr;
             if (const auto it = m_checkboxColumns.find(iSubItem); it != m_checkboxColumns.end())
@@ -637,9 +646,7 @@ OnLButtonUp(UINT nFlags, CPoint point)
     const std::shared_ptr<ICheckbox> checkbox = std::dynamic_pointer_cast<ICheckbox>(m_buttonDownControl);
     const auto prevState = checkbox && checkbox->GetState();
 
-    m_buttonDownControl->OnLButtonUp(iItem != -1 ? GetRealItemIndex(iItem) : -1 , iSubItem, m_callbacksHolder);
     const int itemIndex = m_buttonDownControl->m_iItem;
-    m_buttonDownControl.reset();
 
     if (const auto it = m_checkboxColumns.find(iSubItem); it != m_checkboxColumns.end())
     {
@@ -659,6 +666,9 @@ OnLButtonUp(UINT nFlags, CPoint point)
             CheckCheckboxColumnState(iSubItem);
         }
     }
+
+    m_buttonDownControl->OnLButtonUp(iItem != -1 ? GetRealItemIndex(iItem) : -1 , iSubItem, m_callbacksHolder);
+    m_buttonDownControl.reset();
 
     CBaseList::RedrawItems(itemIndex, itemIndex);
 }
@@ -731,7 +741,7 @@ OnNMCustomdraw(NMHDR* pNMHDR, LRESULT* pResult)
     case CDDS_SUBITEM | CDDS_ITEMPREPAINT:
         {
             // Стадия, которая наступает перед отрисовкой каждого элемента списка.
-            const int iItem = pNMCD->nmcd.dwItemSpec;
+            const int iItem = (int)pNMCD->nmcd.dwItemSpec;
             const int iSubItem = pNMCD->iSubItem;
             const auto* control = m_controls.Get(GetRealItemIndex(iItem), iSubItem);
             if (!control)
